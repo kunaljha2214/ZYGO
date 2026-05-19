@@ -1,0 +1,22 @@
+# Render Blueprint — Zygo API (monorepo root)
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: zygo-api
+    runtime: node
+    plan: free
+    rootDir: .
+    buildCommand: npm install && npm run build --workspace=api
+    startCommand: npm run start --workspace=api
+    healthCheckPath: /api/v1/config/vehicle-types
+    envVars:
+      - key: NODE_VERSION
+        value: 22.11.0
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_DAYS
+        value: 7
+      - key: CORS_ORIGIN
+        value: '*'

@@ -1,5 +1,5 @@
 import { Types } from 'mongoose';
-import { FoodOrder } from '../models/FoodOrder';
+import { FoodOrder, type IFoodOrder } from '../models/FoodOrder';
 import { User } from '../models/User';
 import { Restaurant } from '../models/Restaurant';
 import { DeliveryPartnerProfile } from '../models/DeliveryPartnerProfile';
@@ -75,12 +75,12 @@ export async function findEligibleRiders(
 }
 
 async function resolveRestaurantCoords(
-  order: Awaited<ReturnType<typeof FoodOrder.findById>>
+  order: IFoodOrder
 ): Promise<{ lat: number; lng: number }> {
-  if (order?.restaurantCoords?.lat != null && order.restaurantCoords.lng != null) {
+  if (order.restaurantCoords?.lat != null && order.restaurantCoords.lng != null) {
     return normalizeLatLng(order.restaurantCoords);
   }
-  const restaurant = await Restaurant.findById(order!.restaurantId).lean();
+  const restaurant = await Restaurant.findById(order.restaurantId).lean();
   if (restaurant?.location?.coordinates?.length === 2) {
     return normalizeLatLng({
       lat: restaurant.location.coordinates[1],
