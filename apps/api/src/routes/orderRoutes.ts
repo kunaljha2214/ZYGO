@@ -1,0 +1,51 @@
+import { Router, type RequestHandler } from 'express';
+import { body } from 'express-validator';
+import type { AuthedRequest } from '../middleware/auth';
+import { authMiddleware } from '../middleware/auth';
+import * as orders from '../controllers/orderController';
+
+const r = Router();
+
+r.use(authMiddleware);
+
+const createOrderHandler: RequestHandler = (req, res, next) => {
+  void orders.createOrder(req as AuthedRequest, res, next);
+};
+
+const listOrdersHandler: RequestHandler = (req, res, next) => {
+  void orders.listOrders(req as AuthedRequest, res, next);
+};
+
+const getOrderHandler: RequestHandler = (req, res, next) => {
+  void orders.getOrder(req as AuthedRequest, res, next);
+};
+
+const cancelOrderHandler: RequestHandler = (req, res, next) => {
+  void orders.cancelOrder(req as AuthedRequest, res, next);
+};
+
+r.post(
+  '/orders',
+  [
+    body('restaurantId').notEmpty(),
+    body('items').isArray({ min: 1 }),
+    body('items.*.menuItemId').notEmpty(),
+    body('items.*.quantity').isInt({ min: 1 }),
+    body('items.*.variantName').optional().isString(),
+    body('items.*.addOnNames').optional().isArray(),
+    body('deliveryAddress.label').notEmpty(),
+    body('deliveryAddress.line1').notEmpty(),
+    body('deliveryAddress.coordinates.lat').isFloat(),
+    body('deliveryAddress.coordinates.lng').isFloat(),
+    body('couponCode').optional().isString(),
+  ],
+  createOrderHandler
+);
+
+r.get('/orders', listOrdersHandler);
+
+r.get('/orders/:id', getOrderHandler);
+
+r.patch('/orders/:id/cancel', cancelOrderHandler);
+
+export default r;

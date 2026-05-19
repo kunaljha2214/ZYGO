@@ -1,0 +1,15 @@
+{
+  "name": "zygo",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace=api",
+    "dev:mobile": "npm start --workspace=mobile",
+    "seed": "npm run seed --workspace=api",
+    "seed:users": "npm run seed:users --workspace=api",
+    "build:api": "npm run build --workspace=api",
+    "test:api": "npm test --workspace=api"
+  }
+}
