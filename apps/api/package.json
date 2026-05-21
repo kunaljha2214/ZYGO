@@ -9,6 +9,7 @@
     "start": "node dist/index.js",
     "seed": "ts-node src/seeds/seed.ts",
     "seed:users": "ts-node src/seeds/ensureTestUsers.ts",
+    "fix:driver": "node scripts/free-test-driver.js",
     "test": "jest --runInBand"
   },
   "dependencies": {

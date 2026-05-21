@@ -57,6 +57,19 @@ export function DriverHubScreen() {
     );
   }, []);
 
+  const readCoords = useCallback(
+    (): Promise<{ lat: number; lng: number } | null> =>
+      new Promise((resolve) => {
+        Geolocation.getCurrentPosition(
+          (pos) =>
+            resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+          () => resolve(null),
+          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        );
+      }),
+    []
+  );
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -68,7 +81,23 @@ export function DriverHubScreen() {
       setOnline(p.isOnline);
       setDriverOnlineStore(p.isOnline);
       setEarnings(e);
+      if (p.isBusy && !active) {
+        const coords = await readCoords();
+        await setDriverOnline(false);
+        if (coords) {
+          await updateDriverLocation(coords.lat, coords.lng);
+          const again = await setDriverOnline(true, coords);
+          setOnline(again.isOnline);
+          setDriverOnlineStore(again.isOnline);
+          if (again.incomingRequest) setIncoming(again.incomingRequest);
+        }
+        AppAlert.alert(
+          'Availability fixed',
+          'Stuck “busy” state was cleared. Stay Online to receive bike ride requests.'
+        );
+      }
       if (p.isOnline) {
+        pushLocation();
         const req = await fetchIncomingRide();
         if (req) setIncoming(req);
       }
@@ -76,23 +105,13 @@ export function DriverHubScreen() {
     } finally {
       setLoading(false);
     }
-  }, [navigation]);
+  }, [navigation, pushLocation, readCoords, setDriverOnlineStore, setIncoming]);
 
   useFocusEffect(
     useCallback(() => {
       void load();
     }, [load])
   );
-
-  const readCoords = (): Promise<{ lat: number; lng: number } | null> =>
-    new Promise((resolve) => {
-      Geolocation.getCurrentPosition(
-        (pos) =>
-          resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        () => resolve(null),
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-      );
-    });
 
   const toggleOnline = async (value: boolean) => {
     setBusy(true);
@@ -153,7 +172,10 @@ export function DriverHubScreen() {
         <RegistrationLogoutButton />
       </View>
       {!online ? (
-        <Text style={styles.hint}>Turn on Online to receive rides near you.</Text>
+        <Text style={styles.hint}>
+          Turn on Online to receive ride requests. Use phone 9222222222 (ride driver), not the food delivery
+          rider account 9444444444.
+        </Text>
       ) : incoming ? (
         <Text style={styles.hintActive}>Incoming ride — Accept or Reject on the sheet below.</Text>
       ) : (

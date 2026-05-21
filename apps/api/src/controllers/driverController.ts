@@ -12,6 +12,7 @@ import {
   rejectRideRequest,
   resumeDispatchForOnlineDriver,
 } from '../services/rideAssignmentEngine';
+import { syncDriverBusyState } from '../services/driverAvailability';
 import { saveBase64Document } from '../utils/uploads';
 import { emitToUser } from '../socket/io';
 
@@ -76,6 +77,7 @@ function serializeProfile(
 
 export async function getMyProfile(req: AuthedRequest, res: Response, next: NextFunction) {
   try {
+    await syncDriverBusyState(req.user!.sub);
     const user = await User.findById(req.user!.sub);
     if (!user) {
       next(createError(404));
@@ -187,6 +189,8 @@ export async function setOnlineStatus(req: AuthedRequest, res: Response, next: N
       next(createError(403, 'Complete verification and get admin approval first'));
       return;
     }
+    await syncDriverBusyState(req.user!.sub);
+
     const online = Boolean(req.body.online);
     const lat = Number(req.body.lat);
     const lng = Number(req.body.lng);
@@ -361,6 +365,7 @@ function formatDriverRide(r: Record<string, unknown>) {
 
 export async function getIncomingRequest(req: AuthedRequest, res: Response, next: NextFunction) {
   try {
+    await syncDriverBusyState(req.user!.sub);
     const user = await User.findById(req.user!.sub).lean();
     if (user?.isDriverOnline) {
       await resumeDispatchForOnlineDriver(req.user!.sub);
@@ -374,6 +379,7 @@ export async function getIncomingRequest(req: AuthedRequest, res: Response, next
 
 export async function getActiveRide(req: AuthedRequest, res: Response, next: NextFunction) {
   try {
+    await syncDriverBusyState(req.user!.sub);
     const ride = await RideBooking.findOne({
       captainId: req.user!.sub,
       status: { $nin: ['completed', 'cancelled'] },

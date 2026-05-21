@@ -4,6 +4,7 @@ import { User } from '../models/User';
 import { DriverProfile } from '../models/DriverProfile';
 import { haversineKm, estimateDurationMin } from '../utils/geo';
 import { emitToDriver, emitToUser } from '../socket/io';
+import { syncDriverBusyState } from './driverAvailability';
 
 /** Default 90s (MVP testing); override with RIDE_REQUEST_TIMEOUT_MS in `.env`. */
 const REQUEST_TIMEOUT_MS = Number(process.env.RIDE_REQUEST_TIMEOUT_MS || 90_000);
@@ -221,6 +222,17 @@ export async function startRideDispatch(rideId: string): Promise<void> {
   if (!ride) return;
   if (ride.captainId || ride.assignmentState === 'assigned') return;
 
+  const onlineDrivers = await User.find({
+    role: 'driver',
+    isDriverOnline: true,
+    driverVehicleType: ride.vehicleType,
+  })
+    .select('_id')
+    .lean();
+  for (const d of onlineDrivers) {
+    await syncDriverBusyState(d._id.toString());
+  }
+
   const pickup = ride.pickup.coordinates;
   const { platformFee, driverEarned } = computeDriverEarnings(ride.fare);
   ride.platformFee = platformFee;
@@ -349,6 +361,7 @@ export function clearRideDispatch(rideId: string): void {
  * re-offer rides that had no driver or timed out.
  */
 export async function resumeDispatchForOnlineDriver(driverId: string): Promise<void> {
+  await syncDriverBusyState(driverId);
   const user = await User.findById(driverId).lean();
   if (!user?.isDriverOnline || user.role !== 'driver' || !user.driverVehicleType) return;
 

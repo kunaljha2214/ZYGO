@@ -7,6 +7,7 @@ import { computeFare, estimateDurationMin, haversineKm } from '../utils/geo';
 import { fetchMapboxDrivingRoute } from '../services/mapboxDirections';
 import { getVehicleType } from '../config/app';
 import { startRideDispatch, clearRideDispatch } from '../services/rideAssignmentEngine';
+import { syncDriverBusyState } from '../services/driverAvailability';
 
 export async function estimateRide(
   req: AuthedRequest,
@@ -170,6 +171,9 @@ export async function cancelRide(
       return;
     }
     clearRideDispatch(ride._id.toString());
+    if (ride.captainId) {
+      await syncDriverBusyState(ride.captainId.toString());
+    }
     ride.status = 'cancelled';
     ride.assignmentState = 'none';
     ride.pendingDriverId = null;
