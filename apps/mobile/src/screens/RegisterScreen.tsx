@@ -63,8 +63,7 @@ export function RegisterScreen({ navigation }: Props) {
       let msg = e instanceof Error ? e.message : 'Registration failed';
       if (msg === 'Network Error') {
         msg =
-          `Cannot reach API (${API_BASE_URL}). Start the API, then run:\n` +
-          `adb reverse tcp:4000 tcp:4000`;
+          `Cannot reach API (${API_BASE_URL}). Check your internet connection and that the server is running.`;
       }
       setErr(msg);
     } finally {

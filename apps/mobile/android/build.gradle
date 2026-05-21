@@ -26,6 +26,9 @@ allprojects {
         maven {
             url = uri("${rootProject.projectDir}/../../../node_modules/@react-native-async-storage/async-storage/android/local_repo")
         }
+        maven {
+            url = 'https://api.mapbox.com/downloads/v2/releases/maven'
+        }
         google()
         mavenCentral()
     }

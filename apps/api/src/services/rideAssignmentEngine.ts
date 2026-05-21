@@ -5,11 +5,8 @@ import { DriverProfile } from '../models/DriverProfile';
 import { haversineKm, estimateDurationMin } from '../utils/geo';
 import { emitToDriver, emitToUser } from '../socket/io';
 
-/** 15s prod; 2min dev unless RIDE_REQUEST_TIMEOUT_MS is set in `.env`. */
-const REQUEST_TIMEOUT_MS = Number(
-  process.env.RIDE_REQUEST_TIMEOUT_MS ||
-    (process.env.NODE_ENV === 'production' ? 15_000 : 120_000)
-);
+/** Default 90s (MVP testing); override with RIDE_REQUEST_TIMEOUT_MS in `.env`. */
+const REQUEST_TIMEOUT_MS = Number(process.env.RIDE_REQUEST_TIMEOUT_MS || 90_000);
 const WAITING_RIDE_MAX_AGE_MS = 60 * 60 * 1000;
 const SEARCH_RADIUS_KM = Number(process.env.RIDE_SEARCH_RADIUS_KM || 8);
 
@@ -136,6 +133,35 @@ async function buildRequestPayload(rideId: string, driverId: string) {
   };
 }
 
+async function reofferToDriver(rideId: string, driverId: string): Promise<boolean> {
+  const payload = await buildRequestPayload(rideId, driverId);
+  if (!payload) return false;
+
+  await RideBooking.findByIdAndUpdate(rideId, {
+    pendingDriverId: new Types.ObjectId(driverId),
+    dispatchExpiresAt: new Date(payload.expiresAt),
+    status: 'dispatching',
+    assignmentState: 'dispatching',
+  });
+
+  emitToDriver(driverId, 'ride:request', payload);
+  ensureDispatchTimer(rideId, driverId);
+  return true;
+}
+
+/** Restore in-memory timeout after API restart (e.g. Render) while DB still has a pending offer. */
+function ensureDispatchTimer(rideId: string, driverId: string): void {
+  let state = dispatches.get(rideId);
+  if (!state) {
+    state = { rideId, driverIds: [driverId], index: 0 };
+    dispatches.set(rideId, state);
+  }
+  if (state.timeout) clearTimeout(state.timeout);
+  state.timeout = setTimeout(() => {
+    void handleRequestTimeout(rideId, driverId);
+  }, REQUEST_TIMEOUT_MS);
+}
+
 async function sendToNextDriver(rideId: string): Promise<void> {
   const state = dispatches.get(rideId);
   if (!state) return;
@@ -171,11 +197,7 @@ async function sendToNextDriver(rideId: string): Promise<void> {
   });
 
   emitToDriver(driverId, 'ride:request', payload);
-
-  if (state.timeout) clearTimeout(state.timeout);
-  state.timeout = setTimeout(() => {
-    void handleRequestTimeout(rideId, driverId);
-  }, REQUEST_TIMEOUT_MS);
+  ensureDispatchTimer(rideId, driverId);
 }
 
 async function handleRequestTimeout(rideId: string, driverId: string): Promise<void> {
@@ -292,13 +314,28 @@ export async function rejectRideRequest(rideId: string, driverId: string): Promi
 }
 
 export async function getPendingRequestForDriver(driverId: string) {
+  const user = await User.findById(driverId).lean();
+  if (!user?.isDriverOnline || user.isDriverBusy || user.role !== 'driver') return null;
+
   const ride = await RideBooking.findOne({
     pendingDriverId: new Types.ObjectId(driverId),
-    dispatchExpiresAt: { $gt: new Date() },
     assignmentState: 'dispatching',
-  }).lean();
+  })
+    .sort({ dispatchExpiresAt: -1 })
+    .lean();
+
   if (!ride) return null;
-  return buildRequestPayload(ride._id.toString(), driverId);
+
+  const rideId = ride._id.toString();
+  const expires = ride.dispatchExpiresAt;
+  if (!expires || expires <= new Date()) {
+    const ok = await reofferToDriver(rideId, driverId);
+    if (!ok) return null;
+  } else {
+    ensureDispatchTimer(rideId, driverId);
+  }
+
+  return buildRequestPayload(rideId, driverId);
 }
 
 export function clearRideDispatch(rideId: string): void {
@@ -338,14 +375,9 @@ export async function resumeDispatchForOnlineDriver(driverId: string): Promise<v
       continue;
     }
 
-    if (
-      pending === driverId &&
-      ride.dispatchExpiresAt &&
-      ride.dispatchExpiresAt > new Date()
-    ) {
-      const payload = await buildRequestPayload(rideId, driverId);
-      if (payload) emitToDriver(driverId, 'ride:request', payload);
-      return;
+    if (pending === driverId && ride.assignmentState === 'dispatching') {
+      const ok = await reofferToDriver(rideId, driverId);
+      if (ok) return;
     }
 
     clearRideDispatch(rideId);

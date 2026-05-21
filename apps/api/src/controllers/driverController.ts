@@ -188,11 +188,18 @@ export async function setOnlineStatus(req: AuthedRequest, res: Response, next: N
       return;
     }
     const online = Boolean(req.body.online);
+    const lat = Number(req.body.lat);
+    const lng = Number(req.body.lng);
     const updates: Record<string, unknown> = { isDriverOnline: online };
     if (online) {
-      const existing = await User.findById(req.user!.sub).lean();
-      if (!existing?.currentLocation?.coordinates?.length) {
-        updates.currentLocation = { type: 'Point', coordinates: [77.5946, 12.9716] };
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        updates.currentLocation = { type: 'Point', coordinates: [lng, lat] };
+      } else {
+        const existing = await User.findById(req.user!.sub).lean();
+        if (!existing?.currentLocation?.coordinates?.length) {
+          next(createError(400, 'Location required — enable GPS before going online'));
+          return;
+        }
       }
     }
     const user = await User.findByIdAndUpdate(req.user!.sub, updates, { new: true });

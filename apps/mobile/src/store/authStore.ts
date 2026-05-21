@@ -52,6 +52,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     disconnectDriverSocket();
     disconnectDeliverySocket();
     useDriverRequestStore.getState().setIncoming(null);
+    useDriverRequestStore.getState().setDriverOnline(false);
     useDeliveryRequestStore.getState().setIncoming(null);
     queryClient.clear();
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { StackScroll } from '../components/layout/StackScroll';
 
 import type { HomeStackProps } from '../navigation/types';
@@ -10,8 +10,8 @@ import { api } from '../api/client';
 import { Button } from '../components/Button';
 
 import { Card } from '../components/Card';
-
 import { shared } from '../theme/styles';
+import { colors } from '../theme';
 
 
 
@@ -148,8 +148,17 @@ export function RideFareScreen({ navigation, route }: Props) {
 
 
   return (
-
     <StackScroll>
+      <Card glow style={styles.tripCard}>
+        <Text style={shared.label}>Pickup</Text>
+        <Text style={styles.placeLine} numberOfLines={3}>
+          {pickup.line1}
+        </Text>
+        <Text style={[shared.label, styles.dropLabel]}>Drop</Text>
+        <Text style={styles.placeLine} numberOfLines={3}>
+          {drop.line1}
+        </Text>
+      </Card>
 
       <Text style={shared.sectionLabel}>Vehicle</Text>
 
@@ -180,13 +189,9 @@ export function RideFareScreen({ navigation, route }: Props) {
       </View>
 
       {estimate ? (
-
         <Card glow style={shared.box}>
-
           <Text style={shared.meta}>
-
-            ~{estimate.distanceKm} km · ~{estimate.durationMin} min
-
+            Route · ~{estimate.distanceKm} km · ~{estimate.durationMin} min
           </Text>
 
           <Text style={shared.fare}>₹{estimate.fare.toFixed(2)}</Text>
@@ -206,8 +211,12 @@ export function RideFareScreen({ navigation, route }: Props) {
       {bookErr ? <Text style={shared.err}>{bookErr}</Text> : null}
 
     </StackScroll>
-
   );
-
 }
+
+const styles = StyleSheet.create({
+  tripCard: { marginBottom: 4 },
+  dropLabel: { marginTop: 14 },
+  placeLine: { color: colors.text, fontSize: 16, lineHeight: 22 },
+});
 

@@ -8,13 +8,15 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import MapView, { Marker, type Region } from 'react-native-maps';
-import { RideMapView } from './RideMapView';
+import { RideMapView, type RideMapViewRef } from './RideMapView';
+import { MapMarker } from './MapMarker';
 import { Button } from '../Button';
 import { reverseGeocode, type GeocodedPlace } from '../../services/geocoding';
 import { ensureLocationPermission, getFreshMapCoordinates } from '../../services/location';
 import { withTimeout } from '../../utils/withTimeout';
 import { colors } from '../../theme';
+import { ensureMapboxInitialized } from '../../config/mapboxInit';
+import type { MapRegion } from './mapTypes';
 
 export type LocationPickerKind = 'pickup' | 'drop';
 
@@ -28,7 +30,7 @@ type Props = {
   onConfirm: (place: GeocodedPlace, kind: LocationPickerKind) => void;
 };
 
-function regionFor(lat: number, lng: number): Region {
+function regionFor(lat: number, lng: number): MapRegion {
   return {
     latitude: lat,
     longitude: lng,
@@ -46,11 +48,11 @@ export function LocationPickerModal({
   onClose,
   onConfirm,
 }: Props) {
-  const mapRef = useRef<MapView>(null);
+  const mapRef = useRef<RideMapViewRef>(null);
   const snappedToUser = useRef(false);
   const [mapMounted, setMapMounted] = useState(false);
   const [pin, setPin] = useState(fallback);
-  const [initialRegion, setInitialRegion] = useState<Region>(() =>
+  const [initialRegion, setInitialRegion] = useState<MapRegion>(() =>
     regionFor(fallback.lat, fallback.lng)
   );
   const [booting, setBooting] = useState(false);
@@ -93,6 +95,8 @@ export function LocationPickerModal({
       snappedToUser.current = false;
       return;
     }
+
+    void ensureMapboxInitialized().catch(() => {});
 
     setPin(fallback);
     setInitialRegion(regionFor(fallback.lat, fallback.lng));
@@ -190,11 +194,7 @@ export function LocationPickerModal({
               style={styles.map}
               initialRegion={initialRegion}
               onMapReady={onMapReady}
-              loadingEnabled
               showsUserLocation
-              showsMyLocationButton
-              moveOnMarkerPress={false}
-              cacheEnabled={false}
               onPress={(e) => {
                 const { latitude, longitude } = e.nativeEvent.coordinate;
                 placePinAt(latitude, longitude);
@@ -203,18 +203,13 @@ export function LocationPickerModal({
                 const { latitude, longitude } = e.nativeEvent.coordinate;
                 placePinAt(latitude, longitude);
               }}
-              onPoiClick={(e) => {
-                const { coordinate } = e.nativeEvent;
-                placePinAt(coordinate.latitude, coordinate.longitude);
-              }}
               onUserLocationChange={onUserLocationChange}
             >
-              <Marker
+              <MapMarker
                 key={`pin-${pin.lat.toFixed(6)}-${pin.lng.toFixed(6)}`}
                 identifier="selected-pin"
                 coordinate={{ latitude: pin.lat, longitude: pin.lng }}
                 draggable
-                tracksViewChanges={Platform.OS === 'android'}
                 onDragEnd={(e) => {
                   const { latitude, longitude } = e.nativeEvent.coordinate;
                   placePinAt(latitude, longitude);

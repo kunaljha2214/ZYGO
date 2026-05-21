@@ -4,6 +4,7 @@ import type { Response, NextFunction } from 'express';
 import type { AuthedRequest } from '../middleware/auth';
 import { RideBooking } from '../models/RideBooking';
 import { computeFare, estimateDurationMin, haversineKm } from '../utils/geo';
+import { fetchMapboxDrivingRoute } from '../services/mapboxDirections';
 import { getVehicleType } from '../config/app';
 import { startRideDispatch, clearRideDispatch } from '../services/rideAssignmentEngine';
 
@@ -27,11 +28,13 @@ export async function estimateRide(
       next(createError(400, 'Invalid vehicle type'));
       return;
     }
-    const distanceKm =
-      Math.round(haversineKm(pickup.coordinates, drop.coordinates) * 100) / 100;
-    const durationMin = estimateDurationMin(distanceKm);
+    const mapbox = await fetchMapboxDrivingRoute(pickup.coordinates, drop.coordinates);
+    const distanceKm = mapbox
+      ? mapbox.distanceKm
+      : Math.round(haversineKm(pickup.coordinates, drop.coordinates) * 100) / 100;
+    const durationMin = mapbox ? mapbox.durationMin : estimateDurationMin(distanceKm);
     const { fare } = computeFare(vehicleType, distanceKm, durationMin);
-    res.json({ distanceKm, durationMin, fare });
+    res.json({ distanceKm, durationMin, fare, routeSource: mapbox ? 'mapbox' : 'estimate' });
   } catch (e) {
     next(e);
   }
@@ -61,9 +64,11 @@ export async function createRide(
       next(createError(400, 'Invalid vehicle type'));
       return;
     }
-    const distanceKm =
-      Math.round(haversineKm(pickup.coordinates, drop.coordinates) * 100) / 100;
-    const durationMin = estimateDurationMin(distanceKm);
+    const mapbox = await fetchMapboxDrivingRoute(pickup.coordinates, drop.coordinates);
+    const distanceKm = mapbox
+      ? mapbox.distanceKm
+      : Math.round(haversineKm(pickup.coordinates, drop.coordinates) * 100) / 100;
+    const durationMin = mapbox ? mapbox.durationMin : estimateDurationMin(distanceKm);
     const { fare } = computeFare(vehicleType, distanceKm, durationMin);
 
     const platformFee = Math.round(fare * 0.17);

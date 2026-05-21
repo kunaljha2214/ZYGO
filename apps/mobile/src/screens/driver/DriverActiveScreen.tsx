@@ -10,6 +10,7 @@ import { advanceRide, fetchActiveRide, updateDriverLocation } from '../../api/dr
 import type { DriverRide } from '../../types/driver';
 import { colors, spacing, radii } from '../../theme';
 import { shared } from '../../theme/styles';
+import { drivingDirectionsUrl } from '../../utils/navigationUrl';
 
 const STATUS_LABELS: Record<string, string> = {
   assigned: 'Accepted — head to pickup',
@@ -29,10 +30,6 @@ const BUTTON_LABELS: Record<string, string> = {
   arriving: 'Mark: Arrived',
   arrived: 'Start ride',
   in_progress: 'End ride'};
-
-function mapsUrl(lat: number, lng: number) {
-  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
-}
 
 export function DriverActiveScreen() {
   const [ride, setRide] = useState<DriverRide | null>(null);
@@ -63,7 +60,7 @@ export function DriverActiveScreen() {
       });
     };
     tick();
-    const id = setInterval(tick, 8000);
+    const id = setInterval(tick, 5000);
     return () => clearInterval(id);
   }, [ride?.id]);
 
@@ -119,7 +116,7 @@ export function DriverActiveScreen() {
       <Card glow>
         <Text style={shared.h}>Pickup</Text>
         <Text style={styles.line}>{ride.pickup.line1}</Text>
-        <Pressable onPress={() => void Linking.openURL(mapsUrl(pickup.lat, pickup.lng))}>
+        <Pressable onPress={() => void Linking.openURL(drivingDirectionsUrl(pickup.lat, pickup.lng, 'Pickup'))}>
           <Text style={styles.nav}>Navigate to pickup →</Text>
         </Pressable>
       </Card>
@@ -127,7 +124,7 @@ export function DriverActiveScreen() {
       <Card>
         <Text style={shared.h}>Drop</Text>
         <Text style={styles.line}>{ride.drop.line1}</Text>
-        <Pressable onPress={() => void Linking.openURL(mapsUrl(drop.lat, drop.lng))}>
+        <Pressable onPress={() => void Linking.openURL(drivingDirectionsUrl(drop.lat, drop.lng, 'Drop'))}>
           <Text style={styles.nav}>Navigate to destination →</Text>
         </Pressable>
       </Card>
@@ -154,9 +151,9 @@ export function DriverActiveScreen() {
 
       <Pressable
         style={styles.mapsBtn}
-        onPress={() => void Linking.openURL(mapsUrl(navTarget.lat, navTarget.lng))}
+        onPress={() => void Linking.openURL(drivingDirectionsUrl(navTarget.lat, navTarget.lng, 'Navigate'))}
       >
-        <Text style={styles.mapsBtnText}>Open Google Maps navigation</Text>
+        <Text style={styles.mapsBtnText}>Open navigation</Text>
       </Pressable>
 
       {btnLabel && ride.status !== 'completed' ? (

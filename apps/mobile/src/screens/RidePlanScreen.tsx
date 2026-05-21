@@ -1,16 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import { Marker } from 'react-native-maps';
 import type { HomeStackProps } from '../navigation/types';
 import type { Place } from '../navigation/types';
 import { Button } from '../components/Button';
 import { StackScroll } from '../components/layout/StackScroll';
+import { LiveRideMap } from '../components/map/LiveRideMap';
 import { RideMapView } from '../components/rides/RideMapView';
+import { MapMarker } from '../components/rides/MapMarker';
 import { LocationSearchField } from '../components/rides/LocationSearchField';
 import {
   LocationPickerModal,
   type LocationPickerKind} from '../components/rides/LocationPickerModal';
-import { reverseGeocode, type GeocodedPlace } from '../services/geocoding';
+import { reverseGeocode, looksLikeCoordinateLine, type GeocodedPlace } from '../services/geocoding';
+import { isFiniteCoord } from '../components/rides/mapTypes';
 import {
   ensureLocationPermission,
   getCurrentCoordinates,
@@ -36,6 +38,7 @@ export function RidePlanScreen({ navigation }: Props) {
   const [pickerMode, setPickerMode] = useState<PickerMode>(null);
   const [dropFieldKey, setDropFieldKey] = useState(0);
   const [dropErr, setDropErr] = useState<string | null>(null);
+  const [mapGestureActive, setMapGestureActive] = useState(false);
 
   const applyPickup = useCallback((place: GeocodedPlace) => {
     setPickup(place.coordinates);
@@ -47,6 +50,10 @@ export function RidePlanScreen({ navigation }: Props) {
   }, []);
 
   const applyDrop = useCallback((place: GeocodedPlace) => {
+    if (!isFiniteCoord(place.coordinates)) {
+      setDropErr('Could not read that location. Try another result or pick on the map.');
+      return;
+    }
     setDrop(place.coordinates);
     setDropLine(place.line1);
     setDropFieldKey((k) => k + 1);
@@ -59,12 +66,20 @@ export function RidePlanScreen({ navigation }: Props) {
       setPickupLine('Finding address…');
       try {
         const place = await withTimeout(reverseGeocode(c.lat, c.lng), 12_000, 'address');
-        applyPickup(place);
+        if (looksLikeCoordinateLine(place.line1)) {
+          setPickup(c);
+          setPickupLine('Address not found for GPS. Choose pickup on map or try GPS again.');
+          setPickupLabel('Pickup');
+          setGpsFailed(true);
+        } else {
+          applyPickup(place);
+        }
       } catch {
         setPickup(c);
-        setPickupLine(`Near ${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}`);
-        setPickupLabel('Current location');
-        setGpsFailed(false);
+        setPickupLine('Could not load address. Tap “Choose pickup on map” or try GPS again.');
+        setPickupLabel('Pickup');
+        setGpsFailed(true);
+      } finally {
         setGeocoding(false);
       }
     },
@@ -103,16 +118,20 @@ export function RidePlanScreen({ navigation }: Props) {
     void detectPickupFromGps();
   }, [detectPickupFromGps]);
 
-  const mapRegion = useMemo(() => {
-    const lat = drop ? (pickup.lat + drop.lat) / 2 : pickup.lat;
-    const lng = drop ? (pickup.lng + drop.lng) / 2 : pickup.lng;
-    const delta = drop ? 0.06 : 0.004;
+  const pickupMapRegion = useMemo(() => {
+    const delta = 0.004;
     return {
-      latitude: lat,
-      longitude: lng,
+      latitude: pickup.lat,
+      longitude: pickup.lng,
       latitudeDelta: delta,
-      longitudeDelta: delta};
-  }, [pickup, drop]);
+      longitudeDelta: delta,
+    };
+  }, [pickup.lat, pickup.lng]);
+
+  const pickupMapFitKey = useMemo(
+    () => `pickup-${pickup.lat.toFixed(5)},${pickup.lng.toFixed(5)}`,
+    [pickup.lat, pickup.lng]
+  );
 
   const handleMapConfirm = useCallback(
     (place: GeocodedPlace, kind: LocationPickerKind) => {
@@ -147,23 +166,30 @@ export function RidePlanScreen({ navigation }: Props) {
   const showPickupSpinner = locating || geocoding;
 
   return (
-    <StackScroll keyboardShouldPersistTaps="always" nestedScrollEnabled>
-      <View style={shared.mapBox}>
-        <RideMapView
-          style={shared.map}
-          region={mapRegion}
-          showsUserLocation
-          showsMyLocationButton
-        >
-          <Marker coordinate={{ latitude: pickup.lat, longitude: pickup.lng }} title="Pickup" />
-          {drop ? (
-            <Marker
-              coordinate={{ latitude: drop.lat, longitude: drop.lng }}
-              title="Drop"
-              pinColor={colors.primaryDark}
-            />
-          ) : null}
-        </RideMapView>
+    <StackScroll
+      keyboardShouldPersistTaps="always"
+      nestedScrollEnabled
+      scrollEnabled={!mapGestureActive}
+    >
+      <View
+        style={shared.mapBox}
+        onTouchStart={() => setMapGestureActive(true)}
+        onTouchEnd={() => setMapGestureActive(false)}
+        onTouchCancel={() => setMapGestureActive(false)}
+      >
+        {drop && isFiniteCoord(pickup) && isFiniteCoord(drop) ? (
+          <LiveRideMap style={shared.map} pickup={pickup} drop={drop} />
+        ) : (
+          <RideMapView
+            style={shared.map}
+            region={pickupMapRegion}
+            regionFitKey={pickupMapFitKey}
+            showsUserLocation
+            showsMyLocationButton
+          >
+            <MapMarker coordinate={{ latitude: pickup.lat, longitude: pickup.lng }} title="Pickup" />
+          </RideMapView>
+        )}
       </View>
 
       <Text style={shared.label}>Pickup</Text>

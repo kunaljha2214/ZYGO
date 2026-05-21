@@ -33,13 +33,17 @@ export async function submitDriverForReview() {
   return data.profile;
 }
 
-export async function setDriverOnline(online: boolean) {
+export async function setDriverOnline(
+  online: boolean,
+  coordinates?: { lat: number; lng: number }
+) {
   const { data } = await api.patch<{
     isOnline: boolean;
     isBusy: boolean;
     incomingRequest?: RideRequest | null;
   }>('/driver/online', {
     online,
+    ...(coordinates ? { lat: coordinates.lat, lng: coordinates.lng } : {}),
   });
   return data;
 }

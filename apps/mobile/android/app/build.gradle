@@ -1,7 +1,24 @@
 apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
+
+// apps/mobile/.env (relative to android/app)
+project.ext.envConfigFiles = [
+    debug: "../../.env",
+    release: "../../.env",
+]
 apply from: file("../../../../node_modules/react-native-config/android/dotenv.gradle")
+
+def mobileEnvFile = file("../../.env")
+def mapboxAccessToken = ""
+if (mobileEnvFile.exists()) {
+    mobileEnvFile.eachLine { line ->
+        def matcher = (line =~ /^\s*MAPBOX_ACCESS_TOKEN\s*=\s*(.+)\s*$/)
+        if (matcher.find()) {
+            mapboxAccessToken = matcher.group(1).trim().replaceAll(/^["']|["']$/, "")
+        }
+    }
+}
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -82,9 +99,13 @@ android {
         versionName "1.0"
         manifestPlaceholders = [
             usesCleartextTraffic: "true",
-            GOOGLE_MAPS_API_KEY: project.env.get("GOOGLE_MAPS_API_KEY") ?: ""
         ]
         resValue "string", "build_config_package", "com.zygomobile"
+        if (mapboxAccessToken) {
+            def escaped = mapboxAccessToken.replaceAll("%", "\\\\u0025")
+            buildConfigField "String", "MAPBOX_ACCESS_TOKEN", "\"${escaped}\""
+            resValue "string", "mapbox_access_token", "\"${escaped}\""
+        }
     }
     signingConfigs {
         debug {
@@ -93,6 +114,12 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+    }
+    packagingOptions {
+        pickFirst 'lib/x86/libc++_shared.so'
+        pickFirst 'lib/x86_64/libc++_shared.so'
+        pickFirst 'lib/arm64-v8a/libc++_shared.so'
+        pickFirst 'lib/armeabi-v7a/libc++_shared.so'
     }
     buildTypes {
         debug {

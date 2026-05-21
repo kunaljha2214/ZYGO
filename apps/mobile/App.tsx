@@ -13,7 +13,7 @@ import { AlertHost } from './src/components/alert/AlertHost';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { useAuthStore } from './src/store/authStore';
 import { colors, navigationTheme } from './src/theme';
-
+import { ensureMapboxInitialized } from './src/config/mapboxInit';
 function AppBootstrap() {
   const hydrated = useAuthStore((s) => s.hydrated);
   const token = useAuthStore((s) => s.token);
@@ -22,6 +22,7 @@ function AppBootstrap() {
 
   useEffect(() => {
     void hydrate();
+    void ensureMapboxInitialized().catch(() => {});
   }, [hydrate]);
 
   if (!hydrated) {

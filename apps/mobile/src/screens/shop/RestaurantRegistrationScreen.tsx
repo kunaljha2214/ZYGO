@@ -10,7 +10,8 @@ import {
   PermissionsAndroid,
   ActivityIndicator} from 'react-native';
 import Geolocation from '@react-native-community/geolocation';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import { RideMapView } from '../../components/rides/RideMapView';
+import { MapMarker } from '../../components/rides/MapMarker';
 import { AppScreen } from '../../components/layout/AppScreen';
 import { AuthHeroCard } from '../../components/auth/AuthHeroCard';
 import { AuthField } from '../../components/auth/AuthField';
@@ -294,20 +295,23 @@ export function RestaurantRegistrationScreen({ initial, onSubmitted }: Props) {
               <Text style={styles.linkBtnText}>Use current location on map</Text>
             </Pressable>
             <View style={styles.mapWrap}>
-              <MapView
+              <RideMapView
                 style={styles.map}
-                provider={PROVIDER_GOOGLE}
                 region={{ latitude: lat, longitude: lng, latitudeDelta: 0.02, longitudeDelta: 0.02 }}
                 onPress={(e) => {
                   setLat(e.nativeEvent.coordinate.latitude);
                   setLng(e.nativeEvent.coordinate.longitude);
                 }}
               >
-                <Marker coordinate={{ latitude: lat, longitude: lng }} draggable onDragEnd={(e) => {
-                  setLat(e.nativeEvent.coordinate.latitude);
-                  setLng(e.nativeEvent.coordinate.longitude);
-                }} />
-              </MapView>
+                <MapMarker
+                  coordinate={{ latitude: lat, longitude: lng }}
+                  draggable
+                  onDragEnd={(e) => {
+                    setLat(e.nativeEvent.coordinate.latitude);
+                    setLng(e.nativeEvent.coordinate.longitude);
+                  }}
+                />
+              </RideMapView>
             </View>
           </>
         );

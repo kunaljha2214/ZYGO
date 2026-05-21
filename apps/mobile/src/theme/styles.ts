@@ -195,7 +195,7 @@ export const shared = StyleSheet.create({
   addrLine: { color: colors.textSecondary, marginTop: spacing.xs },
   box: { marginVertical: spacing.lg },
   mapBox: {
-    height: 200,
+    height: 248,
     borderRadius: radii.lg,
     overflow: 'hidden',
     marginBottom: spacing.md,

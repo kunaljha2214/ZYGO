@@ -40,7 +40,7 @@ npm run seed
 
 ### Testing ride requests (customer + driver)
 
-The driver offer is sent **only while the ride is being dispatched**, with a **short timer** (default **15 seconds**). The **driver must already be logged in, approved, and online** when the customer taps **Book**. If you log out, switch users, and log in as the driver **after** booking, the offer has already timed out — you will not see the notification.
+The driver offer is sent while the ride is dispatching (default **90 seconds** per driver; override with `RIDE_REQUEST_TIMEOUT_MS` in `apps/api/.env`). The driver must be **approved**, **Online ON** on Hub, and **Bike** must match the customer’s vehicle. If the customer books first, going **Online** on the driver phone re-offers waiting rides from the last hour.
 
 **Recommended:** use **two devices** (or **Android emulator + physical phone**):
 
@@ -76,7 +76,7 @@ Real-time delivery uses **Socket.IO** on the same host as the API (no `/api/v1` 
 4. On USB, run `adb reverse tcp:4000 tcp:4000` so real-time events reach the phone.
 5. Advance the shop order through: Accept → Start preparing → **Mark ready for pickup** (dispatch starts only on that step).
 
-API base URL: `http://localhost:4000/api/v1`.
+API base URL (production): `https://zygo.onrender.com/api/v1`. Local dev: `http://localhost:4000/api/v1`.
 
 ## Quick start — Mobile
 
@@ -102,7 +102,7 @@ adb reverse tcp:4000 tcp:4000
 adb reverse tcp:8081 tcp:8081
 ```
 
-2. Set **`API_BASE_URL=http://127.0.0.1:4000/api/v1`** in `apps/mobile/.env` (already aligned if you use the repo default after USB setup).
+2. For **production APK / multi-device testing**, set **`API_BASE_URL=https://zygo.onrender.com/api/v1`** in `apps/mobile/.env`, run **`npm run sync-env`**, then **`npm run build:apk`** (APK at `apps/mobile/android/app/build/outputs/apk/release/app-release.apk`). For local USB dev, use **`http://127.0.0.1:4000/api/v1`** after `adb reverse`.
 
 3. Start the API on your PC (`npm run dev:api` in `apps/api`).
 
@@ -120,40 +120,35 @@ Or `npx react-native run-android` if nothing else is using port **8081** (Metro 
 
 Monorepo note: Gradle uses hoisted `node_modules` at the repo root; `android/settings.gradle` and `android/app/build.gradle` are wired for that. **`android/local.properties`** must point at your SDK (Android Studio usually creates this).
 
-**Google Maps (recommended — fixes black/blank tiles and improves addresses):**
+**Mapbox (maps + address search):** Uses `@rnmapbox/maps` — **no Google Maps API key**. Only your Mapbox public token is required.
 
-1. Open [Google Cloud Console](https://console.cloud.google.com/) → create or select a project.
-2. **Billing** must be enabled (Maps has a free monthly credit; you still need a billing account).
-3. Enable these APIs for the project:
-   - **Maps SDK for Android**
-   - **Geocoding API** (street-level pickup/drop names from GPS)
-   - **Places API** (search suggestions; used when the key is set)
-4. **Credentials** → **Create credentials** → **API key**.
-5. Restrict the key (recommended):
-   - Application restriction: **Android apps**
-   - Package name: `com.zygomobile`
-   - SHA-1 certificate fingerprint (debug build, from repo root):
-
-     ```bash
-     keytool -list -v -keystore apps/mobile/android/app/debug.keystore -alias androiddebugkey -storepass android -keypass android
-     ```
-
-     Copy the **SHA1** line into the key restriction.
-   - API restriction: limit to the three APIs above.
-6. Add to `apps/mobile/.env`:
+1. Sign up at [Mapbox](https://account.mapbox.com/) → **Access tokens**.
+2. Copy your **public token** (starts with `pk.` — not the secret `sk.` token).
+3. Add to `apps/mobile/.env`:
 
    ```
-   GOOGLE_MAPS_API_KEY=AIza...your_key_here
+   MAPBOX_ACCESS_TOKEN=pk.eyJ...
    ```
 
-7. **Rebuild** the Android app (manifest reads the key at build time):
+   Use the **same token** in `apps/api/.env` for Mapbox Directions (ETA/fare on the server).
+
+   Optional style override (default `mapbox/navigation-night-v1`):
+
+   ```
+   MAPBOX_STYLE_ID=mapbox/navigation-night-v1
+   ```
+
+   **Ride maps:** route lines (Directions API), live captain tracking (Socket.IO every 5s), demand heatmap overlay on plan/fare screens.
+
+4. Rebuild after changing `.env`:
 
    ```bash
    cd apps/mobile
-   npx react-native run-android --no-packager
+   npm run sync-env
+   npx react-native run-android
    ```
 
-Without a key, the app uses **OpenStreetMap** tiles and **Nominatim** for addresses (works offline of Google, but less accurate in India).
+Without a Mapbox token, geocoding falls back to **Nominatim** and map screens show a setup message.
 
 **HTTP (local API):** Debug builds allow cleartext via `manifestPlaceholders` in `android/app/build.gradle`.
 

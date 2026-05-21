@@ -11,6 +11,7 @@ import { updatePartnerLocation } from '../../api/deliveryPartner';
 import type { PartnerOrder } from '../../types/deliveryPartner';
 import { colors, spacing } from '../../theme';
 import { shared } from '../../theme/styles';
+import { drivingDirectionsUrl } from '../../utils/navigationUrl';
 
 const STATUS_LABELS: Record<string, string> = {
   accepted: 'Accepted',
@@ -18,10 +19,6 @@ const STATUS_LABELS: Record<string, string> = {
   picked_up: 'Picked up',
   out_for_delivery: 'Out for delivery',
   delivered: 'Delivered'};
-
-function mapsUrl(lat: number, lng: number, label?: string) {
-  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
-}
 
 export function DeliveryActiveScreen() {
   const [order, setOrder] = useState<PartnerOrder | null>(null);
@@ -110,7 +107,7 @@ export function DeliveryActiveScreen() {
       <Card glow>
         <Text style={shared.h}>Restaurant</Text>
         <Text style={styles.name}>{order.restaurantName}</Text>
-        <Pressable onPress={() => void Linking.openURL(mapsUrl(rest.lat, rest.lng, order.restaurantName))}>
+        <Pressable onPress={() => void Linking.openURL(drivingDirectionsUrl(rest.lat, rest.lng, order.restaurantName))}>
           <Text style={styles.nav}>Navigate to restaurant →</Text>
         </Pressable>
       </Card>
@@ -118,7 +115,7 @@ export function DeliveryActiveScreen() {
       <Card>
         <Text style={shared.h}>Customer</Text>
         <Text style={styles.line}>{order.deliveryAddress.line1}</Text>
-        <Pressable onPress={() => void Linking.openURL(mapsUrl(drop.lat, drop.lng))}>
+        <Pressable onPress={() => void Linking.openURL(drivingDirectionsUrl(drop.lat, drop.lng, 'Customer'))}>
           <Text style={styles.nav}>Navigate to customer →</Text>
         </Pressable>
       </Card>

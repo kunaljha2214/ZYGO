@@ -1,4 +1,4 @@
-import Config from 'react-native-config';
+import { mapboxAccessToken } from '../config/mapbox';
 import { withTimeout } from '../utils/withTimeout';
 
 export type GeocodedPlace = {
@@ -29,35 +29,28 @@ type NominatimAddress = {
   country?: string;
 };
 
-type GoogleGeocodeResult = {
-  formatted_address: string;
-  types?: string[];
+type MapboxFeature = {
+  place_name?: string;
+  text?: string;
+  center?: [number, number];
+  geometry?: { type?: string; coordinates?: [number, number] };
 };
+
+function normalizeLatLng(lat: unknown, lng: unknown): { lat: number; lng: number } | null {
+  const la = Number(lat);
+  const ln = Number(lng);
+  if (!Number.isFinite(la) || !Number.isFinite(ln)) return null;
+  return { lat: la, lng: ln };
+}
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T | null> {
   try {
-    const res = await withTimeout(
-      fetch(url, init),
-      GEO_TIMEOUT_MS,
-      'geocoding'
-    );
+    const res = await withTimeout(fetch(url, init), GEO_TIMEOUT_MS, 'geocoding');
     if (!res.ok) return null;
     return (await res.json()) as T;
   } catch {
     return null;
   }
-}
-
-function isValidGoogleKey(key: string): boolean {
-  const k = key.trim();
-  if (!k) return false;
-  const lower = k.toLowerCase();
-  return !lower.includes('placeholder') && !lower.startsWith('your-') && k.length > 10;
-}
-
-function googleMapsKey(): string | null {
-  const key = Config.GOOGLE_MAPS_API_KEY?.trim() ?? '';
-  return isValidGoogleKey(key) ? key : null;
 }
 
 function formatFromNominatimAddress(
@@ -78,102 +71,94 @@ function formatFromNominatimAddress(
     addr.postcode,
     addr.country,
   ].filter(Boolean) as string[];
-
-  const labelParts = [
-    [streetPart, road].filter(Boolean).join(' ').trim() || undefined,
-    addr.neighbourhood || addr.suburb || addr.quarter,
-    addr.city || addr.town || addr.village,
-  ].filter(Boolean) as string[];
-
-  const line1 = line1Parts.length > 0 ? line1Parts.join(', ') : display;
-  const label =
-    labelParts.length > 0 ? labelParts.join(', ') : name?.trim() || shortLabel(display, name);
-
+  const line1 = line1Parts.join(', ') || display;
+  const label = name?.trim() || addr.neighbourhood || addr.suburb || shortLabel(line1, name);
   return { line1, label };
 }
 
-function shortLabel(displayName: string, name?: string): string {
+function shortLabel(line1: string, name?: string): string {
   if (name?.trim()) return name.trim();
-  const first = displayName.split(',')[0]?.trim();
-  return first || displayName;
+  const first = line1.split(',')[0]?.trim();
+  return first || line1;
 }
 
-function pickBestGoogleGeocodeResult(results: GoogleGeocodeResult[]): GoogleGeocodeResult | null {
-  if (!results.length) return null;
-  const score = (r: GoogleGeocodeResult) => {
-    const types = r.types ?? [];
-    if (types.some((t) => ['establishment', 'point_of_interest', 'store', 'premise'].includes(t))) {
-      return 0;
-    }
-    if (types.includes('street_address') || types.includes('route')) return 1;
-    if (types.includes('sublocality') || types.includes('neighborhood')) return 2;
-    if (types.includes('locality')) return 3;
-    if (types.includes('postal_code')) return 9;
-    return 5;
-  };
-  return [...results].sort((a, b) => score(a) - score(b))[0] ?? null;
+/** True when the string is only lat/lng numbers (not a real address). */
+export function looksLikeCoordinateLine(line: string): boolean {
+  const t = line.trim();
+  if (!t) return true;
+  if (/^near\s+-?\d/i.test(t)) return true;
+  if (/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(t)) return true;
+  if (/^-?\d+\.\d{4,}\s*,\s*-?\d+\.\d{4,}/.test(t)) return true;
+  return false;
 }
 
-async function nearbyPlaceGoogle(lat: number, lng: number, key: string): Promise<GeocodedPlace | null> {
-  const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&rankby=distance&key=${encodeURIComponent(key)}`;
-  const data = await fetchJson<{
-    status: string;
-    results?: Array<{
-      name: string;
-      vicinity?: string;
-      geometry?: { location?: { lat: number; lng: number } };
-    }>;
-  }>(url);
-  if (!data || data.status !== 'OK' || !data.results?.[0]) return null;
-  const place = data.results[0];
-  const loc = place.geometry?.location;
-  const coords = loc ? { lat: loc.lat, lng: loc.lng } : { lat, lng };
-  const vicinity = place.vicinity?.trim();
-  const line1 = vicinity ? `${place.name}, ${vicinity}` : place.name;
-  return { line1, label: place.name, coordinates: coords };
+function mapboxFeatureToPlace(feature: MapboxFeature): GeocodedPlace | null {
+  let lng: unknown;
+  let lat: unknown;
+  if (feature.center && feature.center.length >= 2) {
+    [lng, lat] = feature.center;
+  } else if (
+    feature.geometry?.type === 'Point' &&
+    feature.geometry.coordinates &&
+    feature.geometry.coordinates.length >= 2
+  ) {
+    [lng, lat] = feature.geometry.coordinates;
+  } else {
+    return null;
+  }
+  const coordinates = normalizeLatLng(lat, lng);
+  if (!coordinates) return null;
+  const line1 = (feature.place_name ?? feature.text)?.trim();
+  if (!line1 || looksLikeCoordinateLine(line1)) return null;
+  const label = feature.text?.trim() || line1.split(',')[0]?.trim() || line1;
+  return { line1, label, coordinates };
 }
 
-async function reverseGeocodeGoogle(lat: number, lng: number, key: string): Promise<GeocodedPlace | null> {
-  const nearby = await nearbyPlaceGoogle(lat, lng, key);
-  if (nearby) return nearby;
+async function reverseGeocodeMapbox(lat: number, lng: number, token: string): Promise<GeocodedPlace | null> {
+  const url =
+    `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json` +
+    `?access_token=${encodeURIComponent(token)}&limit=5&language=en` +
+    '&types=address,poi,place,locality,neighborhood';
+  const data = await fetchJson<{ features?: MapboxFeature[] }>(url);
+  for (const feature of data?.features ?? []) {
+    const place = mapboxFeatureToPlace(feature);
+    if (place) return place;
+  }
+  return null;
+}
 
-  const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${encodeURIComponent(key)}`;
-  const data = await fetchJson<{ status: string; results?: GoogleGeocodeResult[] }>(url);
-  if (!data || data.status !== 'OK' || !data.results?.length) return null;
-
-  const best = pickBestGoogleGeocodeResult(data.results);
-  if (!best) return null;
-  const formatted = best.formatted_address;
-  const label = formatted.split(',')[0]?.trim() || formatted;
-  return { line1: formatted, label, coordinates: { lat, lng } };
+async function searchPlacesMapbox(query: string, token: string): Promise<GeocodedPlace[]> {
+  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${encodeURIComponent(token)}&country=in&limit=8&types=address,poi,place,locality,neighborhood&language=en`;
+  const data = await fetchJson<{ features?: MapboxFeature[] }>(url);
+  if (!data?.features?.length) return [];
+  return data.features
+    .map(mapboxFeatureToPlace)
+    .filter((p): p is GeocodedPlace => p != null);
 }
 
 async function reverseGeocodeNominatim(lat: number, lng: number): Promise<GeocodedPlace> {
-  const url = `${NOMINATIM}/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1&zoom=18`;
+  const url = `${NOMINATIM}/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`;
   const item = await fetchJson<{
-    display_name?: string;
+    display_name: string;
     name?: string;
     address?: NominatimAddress;
   }>(url, { headers: HEADERS });
 
-  if (!item) {
-    return {
-      line1: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
-      label: 'Current location',
-      coordinates: { lat, lng },
-    };
-  }
-
-  const display = item.display_name ?? `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-  const { line1, label } = formatFromNominatimAddress(display, item.address, item.name);
-  return { line1, label, coordinates: { lat, lng } };
+  const display = item?.display_name?.trim() ?? '';
+  const { line1, label } = formatFromNominatimAddress(
+    display || 'Your area',
+    item?.address,
+    item?.name
+  );
+  const safeLine1 = looksLikeCoordinateLine(line1) ? 'Your current area' : line1;
+  return { line1: safeLine1, label, coordinates: { lat, lng } };
 }
 
 export async function reverseGeocode(lat: number, lng: number): Promise<GeocodedPlace> {
-  const key = googleMapsKey();
-  if (key) {
-    const google = await reverseGeocodeGoogle(lat, lng, key);
-    if (google) return google;
+  const token = mapboxAccessToken();
+  if (token) {
+    const mapped = await reverseGeocodeMapbox(lat, lng, token);
+    if (mapped) return mapped;
   }
   return reverseGeocodeNominatim(lat, lng);
 }
@@ -182,10 +167,10 @@ export async function searchPlaces(query: string): Promise<GeocodedPlace[]> {
   const q = query.trim();
   if (q.length < 3) return [];
 
-  const key = googleMapsKey();
-  if (key) {
-    const google = await searchPlacesGoogle(q, key);
-    if (google.length > 0) return google;
+  const token = mapboxAccessToken();
+  if (token) {
+    const results = await searchPlacesMapbox(q, token);
+    if (results.length > 0) return results;
   }
 
   const url = `${NOMINATIM}/search?q=${encodeURIComponent(q)}&format=json&limit=8&countrycodes=in&addressdetails=1`;
@@ -200,44 +185,12 @@ export async function searchPlaces(query: string): Promise<GeocodedPlace[]> {
   >(url, { headers: HEADERS });
 
   if (!data) return [];
-  return data.map((item) => {
-    const { line1, label } = formatFromNominatimAddress(item.display_name, item.address, item.name);
-    return {
-      line1,
-      label,
-      coordinates: { lat: parseFloat(item.lat), lng: parseFloat(item.lon) },
-    };
-  });
-}
-
-async function searchPlacesGoogle(query: string, key: string): Promise<GeocodedPlace[]> {
-  const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&components=country:in&key=${encodeURIComponent(key)}`;
-  const data = await fetchJson<{
-    status: string;
-    predictions?: Array<{ description: string; place_id: string }>;
-  }>(url);
-  if (!data || data.status !== 'OK' || !data.predictions?.length) return [];
-
   const places: GeocodedPlace[] = [];
-  for (const p of data.predictions.slice(0, 6)) {
-    const detailUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(p.place_id)}&fields=geometry,formatted_address,name&key=${encodeURIComponent(key)}`;
-    const detail = await fetchJson<{
-      status: string;
-      result?: {
-        name?: string;
-        formatted_address?: string;
-        geometry?: { location?: { lat: number; lng: number } };
-      };
-    }>(detailUrl);
-    const loc = detail?.result?.geometry?.location;
-    if (!detail || detail.status !== 'OK' || !loc) continue;
-    const line1 = detail.result?.formatted_address ?? p.description;
-    const label = detail.result?.name ?? p.description.split(',')[0]?.trim() ?? line1;
-    places.push({
-      line1,
-      label,
-      coordinates: { lat: loc.lat, lng: loc.lng },
-    });
+  for (const item of data) {
+    const coordinates = normalizeLatLng(item.lat, item.lon);
+    if (!coordinates) continue;
+    const { line1, label } = formatFromNominatimAddress(item.display_name, item.address, item.name);
+    places.push({ line1, label, coordinates });
   }
   return places;
 }

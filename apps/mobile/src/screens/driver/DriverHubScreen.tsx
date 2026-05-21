@@ -39,6 +39,7 @@ export function DriverHubScreen() {
   );
   const incoming = useDriverRequestStore((s) => s.incoming);
   const setIncoming = useDriverRequestStore((s) => s.setIncoming);
+  const setDriverOnlineStore = useDriverRequestStore((s) => s.setDriverOnline);
 
   const ensureLocationPermission = useCallback(async () => {
     if (Platform.OS !== 'android') return true;
@@ -65,6 +66,7 @@ export function DriverHubScreen() {
         fetchActiveRide(),
       ]);
       setOnline(p.isOnline);
+      setDriverOnlineStore(p.isOnline);
       setEarnings(e);
       if (p.isOnline) {
         const req = await fetchIncomingRide();
@@ -82,15 +84,34 @@ export function DriverHubScreen() {
     }, [load])
   );
 
+  const readCoords = (): Promise<{ lat: number; lng: number } | null> =>
+    new Promise((resolve) => {
+      Geolocation.getCurrentPosition(
+        (pos) =>
+          resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => resolve(null),
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      );
+    });
+
   const toggleOnline = async (value: boolean) => {
     setBusy(true);
     try {
+      let coords: { lat: number; lng: number } | null = null;
       if (value) {
-        await ensureLocationPermission();
-        pushLocation();
+        const granted = await ensureLocationPermission();
+        if (!granted) {
+          AppAlert.alert('Location needed', 'Allow location access to receive ride requests near you.');
+          return;
+        }
+        coords = await readCoords();
+        if (coords) {
+          await updateDriverLocation(coords.lat, coords.lng);
+        }
       }
-      const res = await setDriverOnline(value);
+      const res = await setDriverOnline(value, coords ?? undefined);
       setOnline(res.isOnline);
+      setDriverOnlineStore(res.isOnline);
       if (value) {
         if (res.incomingRequest) {
           setIncoming(res.incomingRequest);
@@ -100,7 +121,7 @@ export function DriverHubScreen() {
         }
         AppAlert.alert(
           'You are online',
-          'Waiting rides from the last hour are re-offered. Book as customer first, then log in here and go online — or use two phones.'
+          'Stay on this app with Online ON. When a customer books a Bike ride, Accept/Reject appears within ~90 seconds. If you booked first on another device, the offer is re-sent now.'
         );
       } else {
         setIncoming(null);

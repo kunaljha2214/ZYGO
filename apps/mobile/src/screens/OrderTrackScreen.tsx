@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import { RideMapView } from '../components/rides/RideMapView';
+import { MapMarker } from '../components/rides/MapMarker';
 import { StackScroll } from '../components/layout/StackScroll';
 import { useRoute, type RouteProp } from '@react-navigation/native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -91,8 +92,7 @@ export function OrderTrackScreen() {
 
       {showLiveMap ? (
         <View style={styles.mapWrap}>
-          <MapView
-            provider={PROVIDER_GOOGLE}
+          <RideMapView
             style={styles.map}
             initialRegion={{
               latitude: riderPos!.lat,
@@ -105,9 +105,9 @@ export function OrderTrackScreen() {
               latitudeDelta: 0.04,
               longitudeDelta: 0.04}}
           >
-            <Marker coordinate={{ latitude: riderPos!.lat, longitude: riderPos!.lng }} title="Rider" pinColor="#7c3aed" />
-            <Marker coordinate={{ latitude: drop.lat, longitude: drop.lng }} title="You" pinColor="#22c55e" />
-          </MapView>
+            <MapMarker coordinate={{ latitude: riderPos!.lat, longitude: riderPos!.lng }} title="Rider" pinColor="#7c3aed" />
+            <MapMarker coordinate={{ latitude: drop.lat, longitude: drop.lng }} title="You" pinColor="#22c55e" />
+          </RideMapView>
           <Text style={styles.live}>Live rider tracking</Text>
         </View>
       ) : null}
