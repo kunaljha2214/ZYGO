@@ -15,6 +15,28 @@ const addAddressHandler: RequestHandler = (req, res, next) => {
   void users.addAddress(req as AuthedRequest, res, next);
 };
 
+const getProfileHandler: RequestHandler = (req, res, next) => {
+  void users.getProfile(req as AuthedRequest, res, next);
+};
+
+const updateProfileHandler: RequestHandler = (req, res, next) => {
+  void users.updateProfile(req as AuthedRequest, res, next);
+};
+
+r.get('/profile', getProfileHandler);
+
+r.patch(
+  '/profile',
+  [
+    body('name').optional().trim().isLength({ min: 2, max: 120 }),
+    body('dateOfBirth').optional().trim().notEmpty(),
+    body('emergencyContact').optional(),
+    body('emergencyContact.name').optional().trim().notEmpty(),
+    body('emergencyContact.phone').optional().trim().notEmpty(),
+  ],
+  updateProfileHandler
+);
+
 r.get('/addresses', listAddressesHandler);
 
 r.post(

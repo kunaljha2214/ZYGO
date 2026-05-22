@@ -26,6 +26,7 @@ type AuthState = {
   user: AuthUser | null;
   hydrated: boolean;
   setAuth: (token: string, user: AuthUser) => Promise<void>;
+  patchUser: (partial: Partial<AuthUser>) => Promise<void>;
   logout: () => Promise<void>;
   hydrate: () => Promise<void>;
 };
@@ -46,6 +47,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setAuth: async (token, user) => {
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ token, user }));
     set({ token, user });
+  },
+  patchUser: async (partial) => {
+    const { token, user } = get();
+    if (!token || !user) return;
+    const next = { ...user, ...partial };
+    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ token, user: next }));
+    set({ user: next });
   },
   logout: async () => {
     const user = get().user;

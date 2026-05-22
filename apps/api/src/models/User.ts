@@ -17,6 +17,11 @@ export interface ISavedAddress {
   coordinates: { lat: number; lng: number };
 }
 
+export interface IEmergencyContact {
+  name: string;
+  phone: string;
+}
+
 export interface IUser extends Document {
   phone: string;
   email?: string | null;
@@ -42,7 +47,21 @@ export interface IUser extends Document {
   referredByUserId?: Types.ObjectId | null;
   referralWalletBalance: number;
   referralCount: number;
+  dateOfBirth?: Date | null;
+  /** Set true after date of birth is saved — cannot be changed again. */
+  dateOfBirthLocked?: boolean;
+  emergencyContact?: IEmergencyContact | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
+
+const EmergencyContactSchema = new Schema<IEmergencyContact>(
+  {
+    name: { type: String, required: true, trim: true },
+    phone: { type: String, required: true, trim: true },
+  },
+  { _id: false }
+);
 
 const SavedAddressSchema = new Schema<ISavedAddress>(
   {
@@ -100,6 +119,9 @@ const UserSchema = new Schema<IUser>(
     referredByUserId: { type: Schema.Types.ObjectId, ref: 'User', default: null },
     referralWalletBalance: { type: Number, default: 0, min: 0 },
     referralCount: { type: Number, default: 0, min: 0 },
+    dateOfBirth: { type: Date, default: null },
+    dateOfBirthLocked: { type: Boolean, default: false },
+    emergencyContact: { type: EmergencyContactSchema, default: null },
   },
   { timestamps: true }
 );

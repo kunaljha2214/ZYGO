@@ -3,7 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text } from 'react-native';
 import type { AdminTabParamList } from './types';
 import { AdminApprovalsScreen } from '../screens/admin/AdminApprovalsScreen';
-import { AccountScreen } from '../screens/AccountScreen';
+import { AdminAccountStack } from './AdminAccountStack';
 import { tabScreenOptions } from '../theme';
 
 const Tab = createBottomTabNavigator<AdminTabParamList>();
@@ -21,10 +21,11 @@ export function AdminTabs() {
       />
       <Tab.Screen
         name="AdminAccount"
-        component={AccountScreen}
+        component={AdminAccountStack}
         options={{
           tabBarLabel: 'Profile',
           tabBarIcon: () => <Text style={{ fontSize: 20 }}>👤</Text>,
+          headerShown: false,
         }}
       />
     </Tab.Navigator>

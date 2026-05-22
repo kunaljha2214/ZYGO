@@ -9,6 +9,7 @@ import { DeliveryEarningsScreen } from '../screens/delivery/DeliveryEarningsScre
 import { DeliveryWalletScreen } from '../screens/delivery/DeliveryWalletScreen';
 import { DeliveryHistoryScreen } from '../screens/delivery/DeliveryHistoryScreen';
 import { ReferAndEarnScreen } from '../screens/profile/ReferAndEarnScreen';
+import { ProfileDetailsScreen } from '../screens/profile/ProfileDetailsScreen';
 import { DeliveryActiveScreen } from '../screens/delivery/DeliveryActiveScreen';
 import { DeliveryRequestModal } from '../components/delivery/DeliveryRequestModal';
 import { connectDeliverySocket } from '../services/deliverySocket';
@@ -102,6 +103,7 @@ export function DeliveryPartnerStack() {
         <Stack.Screen name="DeliveryWallet" component={DeliveryWalletScreen} options={{ title: 'Wallet' }} />
         <Stack.Screen name="DeliveryHistory" component={DeliveryHistoryScreen} options={{ title: 'Delivery history' }} />
         <Stack.Screen name="ReferAndEarn" component={ReferAndEarnScreen} options={{ title: 'Refer & earn' }} />
+        <Stack.Screen name="ProfileDetails" component={ProfileDetailsScreen} options={{ title: 'Profile' }} />
       </Stack.Navigator>
     </>
   );

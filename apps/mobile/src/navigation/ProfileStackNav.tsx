@@ -4,6 +4,7 @@ import type { ProfileStackParamList } from './types';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { SavedAddressesScreen } from '../screens/profile/SavedAddressesScreen';
 import { ReferAndEarnScreen } from '../screens/profile/ReferAndEarnScreen';
+import { ProfileDetailsScreen } from '../screens/profile/ProfileDetailsScreen';
 import { stackScreenOptions } from '../theme';
 
 const Stack = createNativeStackNavigator<ProfileStackParamList>();
@@ -12,6 +13,11 @@ export function ProfileStackNav() {
   return (
     <Stack.Navigator screenOptions={stackScreenOptions}>
       <Stack.Screen name="ProfileMain" component={ProfileScreen} options={{ headerShown: false }} />
+      <Stack.Screen
+        name="ProfileDetails"
+        component={ProfileDetailsScreen}
+        options={{ title: 'Profile' }}
+      />
       <Stack.Screen
         name="SavedAddresses"
         component={SavedAddressesScreen}

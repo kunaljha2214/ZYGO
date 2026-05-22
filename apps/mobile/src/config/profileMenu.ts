@@ -79,7 +79,6 @@ export function profileMenuForRole(role: string | undefined): ProfileMenuItem[] 
     case 'admin':
       return [
         { id: 'admin_approvals', icon: '✓', label: 'Partner approvals' },
-        REFER_ITEM,
         { id: 'help', icon: '❓', label: 'Help' },
       ];
     default:

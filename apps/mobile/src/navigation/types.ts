@@ -27,6 +27,7 @@ export type OrdersStackParamList = {
 
 export type ProfileStackParamList = {
   ProfileMain: undefined;
+  ProfileDetails: undefined;
   SavedAddresses: undefined;
   ReferAndEarn: undefined;
 };
@@ -64,6 +65,7 @@ export type DeliveryPartnerStackParamList = {
   DeliveryWallet: undefined;
   DeliveryHistory: undefined;
   ReferAndEarn: undefined;
+  ProfileDetails: undefined;
 };
 
 export type DriverPartnerTabParamList = {
@@ -79,6 +81,7 @@ export type DriverPartnerStackParamList = {
   DriverWallet: undefined;
   DriverHistory: undefined;
   ReferAndEarn: undefined;
+  ProfileDetails: undefined;
 };
 
 export type ShopInsightsStackParamList = {
@@ -101,9 +104,14 @@ export type MenuStackParamList = {
   EditMenuItem: { itemId?: string };
 };
 
+export type AdminAccountStackParamList = {
+  AdminAccountMain: undefined;
+  ProfileDetails: undefined;
+};
+
 export type AdminTabParamList = {
   AdminApprovals: undefined;
-  AdminAccount: undefined;
+  AdminAccount: NavigatorScreenParams<AdminAccountStackParamList>;
 };
 
 export type RootStackParamList = {

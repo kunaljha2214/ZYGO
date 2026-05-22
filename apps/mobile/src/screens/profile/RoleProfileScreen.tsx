@@ -26,9 +26,9 @@ import type {
   DeliveryPartnerTabParamList,
   PartnerTabParamList,
   AdminTabParamList,
+  AdminAccountStackParamList,
 } from '../../navigation/types';
 import type { PartnerShellParamList } from '../../navigation/PartnerShellStack';
-import type { AdminShellParamList } from '../../navigation/AdminShellStack';
 import { shared } from '../../theme/styles';
 
 type CustomerNav = CompositeNavigationProp<
@@ -51,8 +51,8 @@ type ShopNav = CompositeNavigationProp<
   NativeStackNavigationProp<PartnerShellParamList>
 >;
 type AdminNav = CompositeNavigationProp<
-  BottomTabNavigationProp<AdminTabParamList, 'AdminAccount'>,
-  NativeStackNavigationProp<AdminShellParamList>
+  NativeStackNavigationProp<AdminAccountStackParamList, 'AdminAccountMain'>,
+  BottomTabNavigationProp<AdminTabParamList, 'AdminAccount'>
 >;
 
 function vehicleLabel(type: string | undefined | null): string | null {
@@ -114,6 +114,20 @@ export function RoleProfileScreen() {
     return item;
   });
 
+  const openProfileDetails = useCallback(() => {
+    if (role === 'customer') {
+      navigation.navigate('ProfileDetails');
+    } else if (role === 'driver') {
+      (navigation as DriverNav).navigate('ProfileDetails');
+    } else if (role === 'delivery_partner') {
+      (navigation as DeliveryNav).navigate('ProfileDetails');
+    } else if (role === 'shop_owner') {
+      (navigation as ShopNav).navigate('ProfileDetails');
+    } else if (role === 'admin') {
+      (navigation as AdminNav).navigate('ProfileDetails');
+    }
+  }, [navigation, role]);
+
   const handleMenu = useCallback(
     (id: ProfileMenuItemId) => {
       switch (id) {
@@ -142,8 +156,6 @@ export function RoleProfileScreen() {
             (navigation as DeliveryNav).navigate('ReferAndEarn');
           } else if (role === 'shop_owner') {
             (navigation as ShopNav).navigate('ReferAndEarn');
-          } else if (role === 'admin') {
-            (navigation as AdminNav).navigate('ReferAndEarn');
           }
           return;
         case 'food_delivery':
@@ -216,9 +228,7 @@ export function RoleProfileScreen() {
         email={user.email}
         rating={rating}
         vehicleLabel={role === 'driver' ? vehicleLabel(user.driverVehicleType) : null}
-        onPressProfile={() =>
-          AppAlert.alert('Profile', 'Edit name and email coming soon.')
-        }
+        onPressProfile={openProfileDetails}
         onPressRating={() => {
           if (role === 'driver') {
             (navigation as DriverNav).navigate('DriverEarnings');

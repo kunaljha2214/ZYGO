@@ -6,7 +6,7 @@ import { RegisterScreen } from '../screens/RegisterScreen';
 import { VerifyEmailScreen } from '../screens/VerifyEmailScreen';
 import { MainTabs } from './MainTabs';
 import { PartnerStack } from './PartnerStack';
-import { AdminShellStack } from './AdminShellStack';
+import { AdminTabs } from './AdminTabs';
 import type { AuthUser } from '../store/authStore';
 import { usesAdminHome, usesCustomerHome } from './homeRole';
 import { stackScreenOptions } from '../theme';
@@ -51,7 +51,7 @@ export function RootNavigator({ isAuthed, user }: Props) {
         customerHome ? (
           <RootStack.Screen name="Main" component={MainTabs} />
         ) : adminHome ? (
-          <RootStack.Screen name="AdminMain" component={AdminShellStack} />
+          <RootStack.Screen name="AdminMain" component={AdminTabs} />
         ) : (
           <RootStack.Screen name="PartnerMain" component={PartnerStack} />
         )
