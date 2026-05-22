@@ -39,6 +39,13 @@ type MapboxFeature = {
 
 export type PlaceSearchKind = 'city' | 'area' | 'all';
 
+/** Area lookup scoped to a selected city (colony, sector, street, etc.). */
+export type AreaSearchContext = {
+  areaQuery: string;
+  city?: string;
+  cityCoordinates?: { lat: number; lng: number };
+};
+
 function normalizeLatLng(lat: unknown, lng: unknown): { lat: number; lng: number } | null {
   const la = Number(lat);
   const ln = Number(lng);
@@ -244,33 +251,178 @@ async function searchCitiesNominatim(query: string): Promise<GeocodedPlace[]> {
   return places;
 }
 
-async function searchAreasNominatim(query: string): Promise<GeocodedPlace[]> {
-  const url = `${NOMINATIM}/search?q=${encodeURIComponent(query)}&format=json&limit=12&countrycodes=in&addressdetails=1`;
-  const data = await fetchJson<
-    Array<{
-      lat: string;
-      lon: string;
-      display_name: string;
-      name?: string;
-      type?: string;
-      address?: NominatimAddress;
-    }>
-  >(url, { headers: HEADERS });
+type NominatimSearchItem = {
+  lat: string;
+  lon: string;
+  display_name: string;
+  name?: string;
+  type?: string;
+  class?: string;
+  address?: NominatimAddress;
+};
 
+function nominatimAreaLabel(item: NominatimSearchItem, city?: string): string | null {
+  const addr = item.address;
+  const label =
+    item.name?.trim() ||
+    addr?.neighbourhood ||
+    addr?.suburb ||
+    addr?.quarter ||
+    addr?.road ||
+    shortLabel(item.display_name);
+  if (!label || looksLikeCoordinateLine(label)) return null;
+  if (city && label.toLowerCase() === city.trim().toLowerCase()) return null;
+  return label;
+}
+
+function isWholeCityResult(item: NominatimSearchItem, city?: string): boolean {
+  const t = (item.type ?? '').toLowerCase();
+  if (t === 'city' || t === 'town') return true;
+  if (!city) return false;
+  const name = item.name?.trim().toLowerCase();
+  return name === city.trim().toLowerCase();
+}
+
+function nominatimItemToAreaPlace(item: NominatimSearchItem, city?: string): GeocodedPlace | null {
+  if (isWholeCityResult(item, city)) return null;
+  const coordinates = normalizeLatLng(item.lat, item.lon);
+  if (!coordinates) return null;
+  const label = nominatimAreaLabel(item, city);
+  if (!label) return null;
+  const { line1 } = formatFromNominatimAddress(item.display_name, item.address, item.name);
+  return { label, line1, coordinates };
+}
+
+async function searchAreasNominatim(query: string, city?: string): Promise<GeocodedPlace[]> {
+  const url = `${NOMINATIM}/search?q=${encodeURIComponent(query)}&format=json&limit=15&countrycodes=in&addressdetails=1`;
+  const data = await fetchJson<NominatimSearchItem[]>(url, { headers: HEADERS });
   if (!data) return [];
+
+  const seen = new Set<string>();
   const places: GeocodedPlace[] = [];
   for (const item of data) {
-    if (item.type === 'city' || item.type === 'town' || item.type === 'administrative') {
-      continue;
-    }
-    const coordinates = normalizeLatLng(item.lat, item.lon);
-    if (!coordinates) continue;
-    const { line1, label } = formatFromNominatimAddress(item.display_name, item.address, item.name);
-    if (looksLikeCoordinateLine(label)) continue;
-    places.push({ line1, label, coordinates });
-    if (places.length >= 8) break;
+    const place = nominatimItemToAreaPlace(item, city);
+    if (!place) continue;
+    const key = place.label.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    places.push(place);
+    if (places.length >= 10) break;
   }
   return places;
+}
+
+/** Nominatim search with city parameter (better for colonies inside a city). */
+async function searchAreasNominatimStructured(
+  areaQuery: string,
+  city: string
+): Promise<GeocodedPlace[]> {
+  const params = new URLSearchParams({
+    q: areaQuery,
+    city,
+    country: 'India',
+    format: 'json',
+    limit: '15',
+    addressdetails: '1',
+    countrycodes: 'in',
+  });
+  const url = `${NOMINATIM}/search?${params.toString()}`;
+  const data = await fetchJson<NominatimSearchItem[]>(url, { headers: HEADERS });
+  if (!data) return [];
+
+  const seen = new Set<string>();
+  const places: GeocodedPlace[] = [];
+  for (const item of data) {
+    const place = nominatimItemToAreaPlace(item, city);
+    if (!place) continue;
+    const key = place.label.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    places.push(place);
+    if (places.length >= 10) break;
+  }
+  return places;
+}
+
+async function searchPlacesMapboxArea(
+  query: string,
+  token: string,
+  proximity?: { lat: number; lng: number },
+  city?: string
+): Promise<GeocodedPlace[]> {
+  const types = 'address,poi,neighborhood,locality,district,place';
+  let url =
+    `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json` +
+    `?access_token=${encodeURIComponent(token)}&country=in&limit=12&types=${types}&language=en`;
+  if (proximity) {
+    url += `&proximity=${proximity.lng},${proximity.lat}`;
+  }
+  const data = await fetchJson<{ features?: MapboxFeature[] }>(url);
+  if (!data?.features?.length) return [];
+
+  const seen = new Set<string>();
+  const out: GeocodedPlace[] = [];
+  for (const feature of data.features) {
+    const types = feature.place_type ?? [];
+    if (
+      city &&
+      types.length === 1 &&
+      types[0] === 'place' &&
+      feature.text?.trim().toLowerCase() === city.trim().toLowerCase()
+    ) {
+      continue;
+    }
+    const place = mapboxFeatureToPlace(feature);
+    if (!place) continue;
+    if (city && place.label.toLowerCase() === city.trim().toLowerCase()) continue;
+    const key = place.label.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(place);
+    if (out.length >= 10) break;
+  }
+  return out;
+}
+
+async function searchAreas(ctx: AreaSearchContext): Promise<GeocodedPlace[]> {
+  const areaQuery = ctx.areaQuery.trim();
+  const city = ctx.city?.trim();
+  if (areaQuery.length < 2) return [];
+
+  const queryVariants = city
+    ? [
+        `${areaQuery}, ${city}, India`,
+        `${areaQuery}, ${city}`,
+        `${city}, ${areaQuery}`,
+      ]
+    : [`${areaQuery}, India`, areaQuery];
+
+  const token = mapboxAccessToken();
+  const merged: GeocodedPlace[] = [];
+  const seen = new Set<string>();
+
+  function append(list: GeocodedPlace[]) {
+    for (const p of list) {
+      const key = `${p.label.toLowerCase()}|${p.coordinates.lat.toFixed(3)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(p);
+    }
+  }
+
+  for (const q of queryVariants) {
+    if (token) {
+      append(await searchPlacesMapboxArea(q, token, ctx.cityCoordinates, city));
+    }
+    append(await searchAreasNominatim(q, city));
+    if (merged.length >= 10) break;
+  }
+
+  if (city && merged.length < 8) {
+    append(await searchAreasNominatimStructured(areaQuery, city));
+  }
+
+  return merged.slice(0, 10);
 }
 
 async function reverseGeocodeNominatim(lat: number, lng: number): Promise<GeocodedPlace> {
@@ -302,8 +454,17 @@ export async function reverseGeocode(lat: number, lng: number): Promise<Geocoded
 
 export async function searchPlaces(
   query: string,
-  kind: PlaceSearchKind = 'all'
+  kind: PlaceSearchKind = 'all',
+  areaContext?: AreaSearchContext
 ): Promise<GeocodedPlace[]> {
+  if (kind === 'area') {
+    return searchAreas(
+      areaContext ?? {
+        areaQuery: query.trim(),
+      }
+    );
+  }
+
   const q = query.trim();
   if (q.length < 2) return [];
 
@@ -315,9 +476,6 @@ export async function searchPlaces(
 
   if (kind === 'city') {
     return searchCitiesNominatim(q);
-  }
-  if (kind === 'area') {
-    return searchAreasNominatim(q);
   }
 
   const url = `${NOMINATIM}/search?q=${encodeURIComponent(q)}&format=json&limit=8&countrycodes=in&addressdetails=1`;

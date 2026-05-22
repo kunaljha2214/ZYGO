@@ -3,6 +3,9 @@ import type { Response, NextFunction } from 'express';
 import type { AuthedRequest } from '../middleware/auth';
 import { Restaurant } from '../models/Restaurant';
 import { MenuItem, isMenuItemActiveNow } from '../models/MenuItem';
+import { haversineKm, normalizeLatLng } from '../utils/geo';
+
+const DEFAULT_RADIUS_KM = 7;
 
 export async function listRestaurants(
   req: AuthedRequest,
@@ -22,17 +25,62 @@ export async function listRestaurants(
     if (cuisine) {
       filter.cuisine = cuisine;
     }
+    const latRaw = req.query.lat;
+    const lngRaw = req.query.lng;
+    const radiusRaw = req.query.radiusKm;
+    const hasGeo =
+      latRaw != null &&
+      lngRaw != null &&
+      String(latRaw).trim() !== '' &&
+      String(lngRaw).trim() !== '';
+
+    let customerPoint: { lat: number; lng: number } | null = null;
+    let radiusKm = DEFAULT_RADIUS_KM;
+    if (hasGeo) {
+      const lat = Number(latRaw);
+      const lng = Number(lngRaw);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        next(createError(400, 'Invalid lat or lng'));
+        return;
+      }
+      customerPoint = normalizeLatLng({ lat, lng });
+      const r = Number(radiusRaw);
+      if (Number.isFinite(r) && r > 0 && r <= 50) {
+        radiusKm = r;
+      }
+    }
+
     const list = await Restaurant.find(filter).sort({ rating: -1 }).lean();
-    res.json(
-      list.map((r) => ({
-        id: r._id,
-        name: r.name,
-        image: r.image,
-        cuisine: r.cuisine,
-        rating: r.rating,
-        location: r.location,
-      }))
-    );
+
+    const mapped = list
+      .map((r) => {
+        const [lng, lat] = r.location.coordinates;
+        const restPoint = normalizeLatLng({ lat, lng });
+        const distanceKm = customerPoint
+          ? Math.round(haversineKm(customerPoint, restPoint) * 100) / 100
+          : undefined;
+        return {
+          id: r._id,
+          name: r.name,
+          image: r.image,
+          cuisine: r.cuisine,
+          rating: r.rating,
+          location: r.location,
+          distanceKm,
+        };
+      })
+      .filter((r) => {
+        if (!customerPoint || r.distanceKm == null) return true;
+        return r.distanceKm <= radiusKm;
+      })
+      .sort((a, b) => {
+        if (a.distanceKm != null && b.distanceKm != null) {
+          return a.distanceKm - b.distanceKm;
+        }
+        return (b.rating ?? 0) - (a.rating ?? 0);
+      });
+
+    res.json(mapped);
   } catch (e) {
     next(e);
   }

@@ -1,99 +1,110 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import type { HomeStackProps } from '../navigation/types';
-import { api } from '../api/client';
+import { fetchNearbyRestaurants, type NearbyRestaurant } from '../api/restaurants';
 import { AppScreen } from '../components/layout/AppScreen';
 import { StackBackHeader } from '../components/layout/StackBackHeader';
 import { GlassCard } from '../components/neon/GlassCard';
 import { RestaurantListCard } from '../components/food/RestaurantListCard';
+import { FoodDeliveryLocationFilter } from '../components/food/FoodDeliveryLocationFilter';
+import {
+  FOOD_DELIVERY_RADIUS_KM,
+  type FoodDeliveryLocation,
+} from '../store/foodDeliveryLocationStore';
 import { colors, spacing } from '../theme';
-
-type Restaurant = {
-  id: string;
-  name: string;
-  cuisine: string[];
-  rating: number;
-  image?: string;
-};
 
 type Props = HomeStackProps<'RestaurantList'>;
 
 export function RestaurantListScreen({ navigation }: Props) {
+  const [deliveryLoc, setDeliveryLoc] = useState<FoodDeliveryLocation | null>(null);
+
+  const onLocationReady = useCallback((loc: FoodDeliveryLocation) => {
+    setDeliveryLoc(loc);
+  }, []);
+
   const { data, isLoading, error, refetch, isRefetching } = useQuery({
-    queryKey: ['restaurants'],
-    queryFn: async () => {
-      const { data: list } = await api.get<Restaurant[]>('/restaurants');
-      return list;
-    },
+    queryKey: [
+      'restaurants-nearby',
+      deliveryLoc?.coordinates.lat,
+      deliveryLoc?.coordinates.lng,
+      FOOD_DELIVERY_RADIUS_KM,
+    ],
+    queryFn: () =>
+      fetchNearbyRestaurants(
+        deliveryLoc!.coordinates.lat,
+        deliveryLoc!.coordinates.lng,
+        FOOD_DELIVERY_RADIUS_KM
+      ),
+    enabled: Boolean(deliveryLoc?.coordinates.lat && deliveryLoc?.coordinates.lng),
   });
 
-  if (isLoading) {
-    return (
-      <AppScreen scroll={false}>
-        <StackBackHeader title="Restaurants" subtitle="Loading menus…" />
+  const count = data?.length ?? 0;
+  const subtitle = deliveryLoc
+    ? count
+      ? `${count} within ${FOOD_DELIVERY_RADIUS_KM} km`
+      : `No restaurants within ${FOOD_DELIVERY_RADIUS_KM} km`
+    : 'Choose delivery location';
+
+  return (
+    <AppScreen scroll={false}>
+      <StackBackHeader title="Restaurants" subtitle={subtitle} />
+      <FoodDeliveryLocationFilter onLocationReady={onLocationReady} />
+
+      {!deliveryLoc ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={colors.primaryBright} />
+          <Text style={styles.hint}>Getting your location…</Text>
+        </View>
+      ) : isLoading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.primaryBright} />
         </View>
-      </AppScreen>
-    );
-  }
-
-  if (error) {
-    return (
-      <AppScreen scroll={false}>
-        <StackBackHeader title="Restaurants" />
+      ) : error ? (
         <GlassCard style={styles.errorCard}>
           <Text style={styles.errorText}>
             {error instanceof Error ? error.message : 'Could not load restaurants'}
           </Text>
         </GlassCard>
-      </AppScreen>
-    );
-  }
-
-  const count = data?.length ?? 0;
-
-  return (
-    <AppScreen scroll={false}>
-      <StackBackHeader
-        title="Restaurants"
-        subtitle={count ? `${count} near you` : 'Food delivery'}
-      />
-      <FlatList
-        style={styles.list}
-        data={data ?? []}
-        keyExtractor={(item) => item.id}
-        onRefresh={() => void refetch()}
-        refreshing={isRefetching}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          <GlassCard style={styles.empty}>
-            <Text style={styles.emptyEmoji}>🍽️</Text>
-            <Text style={styles.emptyTitle}>No restaurants available</Text>
-            <Text style={styles.emptySub}>
-              Shops may be closed or still awaiting approval. Pull down to refresh.
-            </Text>
-          </GlassCard>
-        }
-        renderItem={({ item }) => (
-          <RestaurantListCard
-            name={item.name}
-            rating={item.rating}
-            cuisines={item.cuisine}
-            onPress={() =>
-              navigation.navigate('RestaurantDetail', { id: item.id, title: item.name })
-            }
-          />
-        )}
-      />
+      ) : (
+        <FlatList
+          style={styles.list}
+          data={data ?? []}
+          keyExtractor={(item) => item.id}
+          onRefresh={() => void refetch()}
+          refreshing={isRefetching}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listContent}
+          ListEmptyComponent={
+            <GlassCard style={styles.empty}>
+              <Text style={styles.emptyEmoji}>🍽️</Text>
+              <Text style={styles.emptyTitle}>No restaurants nearby</Text>
+              <Text style={styles.emptySub}>
+                No open restaurants within {FOOD_DELIVERY_RADIUS_KM} km of {deliveryLoc.label}.
+                Try another saved address or current location.
+              </Text>
+            </GlassCard>
+          }
+          renderItem={({ item }) => (
+            <RestaurantListCard
+              name={item.name}
+              rating={item.rating}
+              cuisines={item.cuisine}
+              distanceKm={item.distanceKm}
+              onPress={() =>
+                navigation.navigate('RestaurantDetail', { id: item.id, title: item.name })
+              }
+            />
+          )}
+        />
+      )}
     </AppScreen>
   );
 }
 
 const styles = StyleSheet.create({
   center: { alignItems: 'center', paddingVertical: spacing.xl * 2 },
+  hint: { color: colors.textMuted, marginTop: spacing.md, fontSize: 14 },
   list: { flex: 1 },
   listContent: { paddingBottom: spacing.xl },
   errorCard: { paddingVertical: spacing.lg },

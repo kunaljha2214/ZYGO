@@ -18,8 +18,10 @@ type Props = {
   title: string;
   hint: string;
   searchKind: PlaceSearchKind;
-  /** Prepended to search query (e.g. city name for area search). */
-  queryPrefix?: string;
+  /** Selected city name — scopes area search (e.g. Faridabad). */
+  cityName?: string;
+  /** City center from city picker — biases results near that city. */
+  cityCoordinates?: { lat: number; lng: number };
   onClose: () => void;
   onSelect: (place: GeocodedPlace) => void;
 };
@@ -29,7 +31,8 @@ export function PlaceSearchSheet({
   title,
   hint,
   searchKind,
-  queryPrefix,
+  cityName,
+  cityCoordinates,
   onClose,
   onSelect,
 }: Props) {
@@ -52,12 +55,18 @@ export function PlaceSearchSheet({
       return;
     }
     setLoading(true);
-    const fullQ =
-      searchKind === 'area' && queryPrefix?.trim()
-        ? `${queryPrefix.trim()} ${q}`
-        : q;
     debounceRef.current = setTimeout(() => {
-      void searchPlaces(fullQ, searchKind)
+      void searchPlaces(
+        q,
+        searchKind,
+        searchKind === 'area'
+          ? {
+              areaQuery: q,
+              city: cityName,
+              cityCoordinates,
+            }
+          : undefined
+      )
         .then(setResults)
         .catch(() => setResults([]))
         .finally(() => setLoading(false));
@@ -65,7 +74,7 @@ export function PlaceSearchSheet({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query, visible, queryPrefix, searchKind]);
+  }, [query, visible, cityName, cityCoordinates, searchKind]);
 
   function pick(place: GeocodedPlace) {
     Keyboard.dismiss();
@@ -76,7 +85,9 @@ export function PlaceSearchSheet({
   const placeholder =
     searchKind === 'city'
       ? 'Search city (e.g. Delhi, Mumbai)'
-      : 'Search area or street name';
+      : cityName
+        ? `Colony, sector, street in ${cityName}`
+        : 'Search area or street name';
 
   return (
     <Modal
@@ -124,7 +135,9 @@ export function PlaceSearchSheet({
                 <Text style={styles.empty}>
                   {searchKind === 'city'
                     ? 'No cities found. Try another spelling.'
-                    : 'No places found. Try a different search.'}
+                    : cityName
+                      ? `No areas found in ${cityName}. Try "Nawada colony" or add details in complete address below.`
+                      : 'No places found. Try a different search.'}
                 </Text>
               ) : null
             }

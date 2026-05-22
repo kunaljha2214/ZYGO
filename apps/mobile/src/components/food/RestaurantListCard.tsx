@@ -7,6 +7,7 @@ type Props = {
   name: string;
   rating: number;
   cuisines: string[];
+  distanceKm?: number;
   onPress: () => void;
 };
 
@@ -21,7 +22,7 @@ function initials(name: string) {
   return name.slice(0, 2).toUpperCase();
 }
 
-export function RestaurantListCard({ name, rating, cuisines, onPress }: Props) {
+export function RestaurantListCard({ name, rating, cuisines, distanceKm, onPress }: Props) {
   return (
     <GlassCard onPress={onPress} style={styles.card}>
       <View style={styles.row}>
@@ -74,5 +75,6 @@ const styles = StyleSheet.create({
   rating: { color: colors.lavender, fontWeight: '700', fontSize: 14 },
   dot: { color: colors.textMuted, fontSize: 14 },
   cuisines: { color: colors.textMuted, fontSize: 13, flex: 1, lineHeight: 18 },
+  distance: { color: colors.lavender, fontSize: 13, fontWeight: '600' },
   chevron: { color: colors.primaryBright, fontSize: 24, fontWeight: '300' },
 });

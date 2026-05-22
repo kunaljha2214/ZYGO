@@ -28,6 +28,7 @@ export function AddSavedAddressScreen({ navigation }: Props) {
   const [label, setLabel] = useState('Home');
   const [addressKind, setAddressKind] = useState<SavedAddressKind>('home');
   const [city, setCity] = useState('');
+  const [cityPlace, setCityPlace] = useState<GeocodedPlace | null>(null);
   const [area, setArea] = useState('');
   const [areaPlace, setAreaPlace] = useState<GeocodedPlace | null>(null);
   const [line1, setLine1] = useState('');
@@ -36,6 +37,7 @@ export function AddSavedAddressScreen({ navigation }: Props) {
 
   function onCityPick(place: GeocodedPlace) {
     setCity(place.label);
+    setCityPlace(place);
     setArea('');
     setAreaPlace(null);
   }
@@ -161,9 +163,14 @@ export function AddSavedAddressScreen({ navigation }: Props) {
       <PlaceSearchSheet
         visible={searchTarget === 'area'}
         title="Select area or street"
-        hint={city ? `Areas in ${city}` : 'Search area'}
+        hint={
+          city
+            ? `Search colony, sector, or street inside ${city}`
+            : 'Select a city first'
+        }
         searchKind="area"
-        queryPrefix={city}
+        cityName={city}
+        cityCoordinates={cityPlace?.coordinates}
         onClose={() => setSearchTarget(null)}
         onSelect={onAreaPick}
       />

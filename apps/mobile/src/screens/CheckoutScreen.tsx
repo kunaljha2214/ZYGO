@@ -9,6 +9,7 @@ import { LocationSearchField } from '../components/rides/LocationSearchField';
 import { LocationPickerModal } from '../components/rides/LocationPickerModal';
 import { api } from '../api/client';
 import { useCartStore } from '../store/cartStore';
+import { useFoodDeliveryLocationStore } from '../store/foodDeliveryLocationStore';
 import {
   fetchRestaurantOffers,
   validateRestaurantCoupon,
@@ -33,6 +34,7 @@ export function CheckoutScreen({ navigation }: Props) {
   const restaurantId = useCartStore((s) => s.restaurantId);
   const restaurantName = useCartStore((s) => s.restaurantName);
   const clear = useCartStore((s) => s.clear);
+  const foodDeliveryLoc = useFoodDeliveryLocationStore((s) => s.selected);
 
   const [label, setLabel] = useState('Home');
   const [line1, setLine1] = useState('');
@@ -98,7 +100,7 @@ export function CheckoutScreen({ navigation }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [applyDelivery]);
+  }, [applyDelivery, foodDeliveryLoc]);
 
   const { data: offers = [], isLoading: offersLoading } = useQuery({
     queryKey: ['restaurant-offers', restaurantId],
