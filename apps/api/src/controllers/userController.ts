@@ -160,6 +160,13 @@ export async function updateProfile(
   }
 }
 
+function kindFromLabel(label: string): 'home' | 'work' | 'other' {
+  const l = label.trim().toLowerCase();
+  if (l === 'home') return 'home';
+  if (l === 'work') return 'work';
+  return 'other';
+}
+
 export async function addAddress(
   req: AuthedRequest,
   res: Response,
@@ -175,9 +182,15 @@ export async function addAddress(
       next(createError(400, errors.array()[0].msg));
       return;
     }
-    const { label, line1, coordinates } = req.body as {
+    const body = req.body as {
       label: string;
       line1: string;
+      city?: string;
+      area?: string;
+      contactName?: string;
+      contactPhone?: string;
+      addressKind?: 'home' | 'work' | 'other';
+      isDefault?: boolean;
       coordinates: { lat: number; lng: number };
     };
     const user = await User.findById(req.user.sub);
@@ -185,9 +198,92 @@ export async function addAddress(
       next(createError(404));
       return;
     }
-    user.savedAddresses.push({ label, line1, coordinates });
+    const makeDefault = Boolean(body.isDefault) || user.savedAddresses.length === 0;
+    if (makeDefault) {
+      user.savedAddresses.forEach((a) => {
+        a.isDefault = false;
+      });
+    }
+    user.savedAddresses.push({
+      label: body.label.trim(),
+      line1: body.line1.trim(),
+      city: body.city?.trim() ?? '',
+      area: body.area?.trim() ?? '',
+      contactName: body.contactName?.trim() ?? user.name,
+      contactPhone: body.contactPhone?.trim() ?? user.phone,
+      addressKind: body.addressKind ?? kindFromLabel(body.label),
+      isDefault: makeDefault,
+      coordinates: body.coordinates,
+    });
     await user.save();
     res.status(201).json(user.savedAddresses[user.savedAddresses.length - 1]);
+  } catch (e) {
+    next(e);
+  }
+}
+
+export async function setDefaultAddress(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (!req.user) {
+      next(createError(401));
+      return;
+    }
+    const user = await User.findById(req.user.sub);
+    if (!user) {
+      next(createError(404));
+      return;
+    }
+    const id = String(req.params.id ?? '');
+    let found = false;
+    user.savedAddresses.forEach((a) => {
+      const match = String(a._id) === id;
+      if (match) found = true;
+      a.isDefault = match;
+    });
+    if (!found) {
+      next(createError(404, 'Address not found'));
+      return;
+    }
+    await user.save();
+    const entry = user.savedAddresses.find((a) => String(a._id) === id);
+    res.json(entry);
+  } catch (e) {
+    next(e);
+  }
+}
+
+export async function deleteAddress(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (!req.user) {
+      next(createError(401));
+      return;
+    }
+    const user = await User.findById(req.user.sub);
+    if (!user) {
+      next(createError(404));
+      return;
+    }
+    const id = String(req.params.id ?? '');
+    const idx = user.savedAddresses.findIndex((a) => String(a._id) === id);
+    if (idx < 0) {
+      next(createError(404, 'Address not found'));
+      return;
+    }
+    const wasDefault = Boolean(user.savedAddresses[idx].isDefault);
+    user.savedAddresses.splice(idx, 1);
+    if (wasDefault && user.savedAddresses.length > 0) {
+      user.savedAddresses[0].isDefault = true;
+    }
+    await user.save();
+    res.json({ ok: true });
   } catch (e) {
     next(e);
   }

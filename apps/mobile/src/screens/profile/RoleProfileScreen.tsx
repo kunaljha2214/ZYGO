@@ -27,6 +27,7 @@ import type {
   PartnerTabParamList,
   AdminTabParamList,
   AdminAccountStackParamList,
+  OrdersFilter,
 } from '../../navigation/types';
 import type { PartnerShellParamList } from '../../navigation/PartnerShellStack';
 import { shared } from '../../theme/styles';
@@ -114,6 +115,16 @@ export function RoleProfileScreen() {
     return item;
   });
 
+  const openOrdersWithFilter = useCallback(
+    (ordersFilter: OrdersFilter) => {
+      (navigation as CustomerNav).getParent()?.navigate('Orders', {
+        screen: 'OrdersList',
+        params: { filter: ordersFilter },
+      });
+    },
+    [navigation]
+  );
+
   const openProfileDetails = useCallback(() => {
     if (role === 'customer') {
       navigation.navigate('ProfileDetails');
@@ -159,16 +170,30 @@ export function RoleProfileScreen() {
           }
           return;
         case 'food_delivery':
-          navigation.getParent()?.navigate('Home', { screen: 'RestaurantList' });
+          if (role === 'customer') {
+            openOrdersWithFilter('food');
+          } else {
+            navigation.getParent()?.navigate('Home', { screen: 'RestaurantList' });
+          }
           return;
         case 'my_rides':
-          navigation.getParent()?.navigate('Orders');
+          if (role === 'customer') {
+            openOrdersWithFilter('ride');
+          } else {
+            navigation.getParent()?.navigate('Orders');
+          }
           return;
         case 'my_orders':
-          navigation.getParent()?.navigate('Orders');
+          if (role === 'customer') {
+            openOrdersWithFilter('food');
+          } else {
+            navigation.getParent()?.navigate('Orders');
+          }
           return;
         case 'saved_addresses':
-          navigation.navigate('SavedAddresses');
+          if (role === 'customer') {
+            navigation.navigate('SavedAddresses');
+          }
           return;
         case 'earnings':
           if (role === 'driver') {
@@ -212,7 +237,7 @@ export function RoleProfileScreen() {
           return;
       }
     },
-    [navigation, role]
+    [navigation, role, openOrdersWithFilter]
   );
 
   if (!user) {

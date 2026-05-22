@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { ProfileStackParamList } from './types';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { SavedAddressesScreen } from '../screens/profile/SavedAddressesScreen';
+import { AddSavedAddressScreen } from '../screens/profile/AddSavedAddressScreen';
 import { ReferAndEarnScreen } from '../screens/profile/ReferAndEarnScreen';
 import { ProfileDetailsScreen } from '../screens/profile/ProfileDetailsScreen';
 import { stackScreenOptions } from '../theme';
@@ -22,6 +23,11 @@ export function ProfileStackNav() {
         name="SavedAddresses"
         component={SavedAddressesScreen}
         options={{ title: 'Saved addresses' }}
+      />
+      <Stack.Screen
+        name="AddSavedAddress"
+        component={AddSavedAddressScreen}
+        options={{ title: 'Add address details' }}
       />
       <Stack.Screen
         name="ReferAndEarn"

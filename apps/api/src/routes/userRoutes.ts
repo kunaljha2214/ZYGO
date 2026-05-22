@@ -15,6 +15,14 @@ const addAddressHandler: RequestHandler = (req, res, next) => {
   void users.addAddress(req as AuthedRequest, res, next);
 };
 
+const setDefaultAddressHandler: RequestHandler = (req, res, next) => {
+  void users.setDefaultAddress(req as AuthedRequest, res, next);
+};
+
+const deleteAddressHandler: RequestHandler = (req, res, next) => {
+  void users.deleteAddress(req as AuthedRequest, res, next);
+};
+
 const getProfileHandler: RequestHandler = (req, res, next) => {
   void users.getProfile(req as AuthedRequest, res, next);
 };
@@ -44,10 +52,19 @@ r.post(
   [
     body('label').trim().notEmpty(),
     body('line1').trim().notEmpty(),
+    body('city').optional().trim(),
+    body('area').optional().trim(),
+    body('contactName').optional().trim(),
+    body('contactPhone').optional().trim(),
+    body('addressKind').optional().isIn(['home', 'work', 'other']),
+    body('isDefault').optional().isBoolean(),
     body('coordinates.lat').isFloat(),
     body('coordinates.lng').isFloat(),
   ],
   addAddressHandler
 );
+
+r.patch('/addresses/:id/default', setDefaultAddressHandler);
+r.delete('/addresses/:id', deleteAddressHandler);
 
 export default r;

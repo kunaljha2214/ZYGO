@@ -11,9 +11,18 @@ export type UserRole =
 
 export type DriverVehicleType = 'bike' | 'auto' | 'car';
 
+export type SavedAddressKind = 'home' | 'work' | 'other';
+
 export interface ISavedAddress {
+  _id?: Types.ObjectId;
   label: string;
   line1: string;
+  city?: string;
+  area?: string;
+  contactName?: string;
+  contactPhone?: string;
+  addressKind?: SavedAddressKind;
+  isDefault?: boolean;
   coordinates: { lat: number; lng: number };
 }
 
@@ -67,6 +76,16 @@ const SavedAddressSchema = new Schema<ISavedAddress>(
   {
     label: { type: String, required: true },
     line1: { type: String, required: true },
+    city: { type: String, default: '' },
+    area: { type: String, default: '' },
+    contactName: { type: String, default: '' },
+    contactPhone: { type: String, default: '' },
+    addressKind: {
+      type: String,
+      enum: ['home', 'work', 'other'],
+      default: 'other',
+    },
+    isDefault: { type: Boolean, default: false },
     coordinates: {
       lat: { type: Number, required: true },
       lng: { type: Number, required: true },

@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
-import type { OrdersStackProps } from '../navigation/types';
+import { useRoute, useFocusEffect, type RouteProp } from '@react-navigation/native';
+import type { OrdersStackParamList, OrdersStackProps, OrdersFilter } from '../navigation/types';
 import { api } from '../api/client';
 import { AppScreen } from '../components/layout/AppScreen';
 import { GlassCard } from '../components/neon/GlassCard';
 import { OrderListCard } from '../components/orders/OrderListCard';
+import { OrdersFilterChips } from '../components/orders/OrdersFilterChips';
 import { colors, spacing } from '../theme';
 
 type FoodRow = {
@@ -29,8 +31,56 @@ type RideRow = {
 type Row = (FoodRow | RideRow) & { sortKey: number };
 
 type Props = OrdersStackProps<'OrdersList'>;
+type ListRoute = RouteProp<OrdersStackParamList, 'OrdersList'>;
+
+function filterRows(rows: Row[], filter: OrdersFilter): Row[] {
+  if (filter === 'food') return rows.filter((r) => r.type === 'food');
+  if (filter === 'ride') return rows.filter((r) => r.type === 'ride');
+  return rows;
+}
+
+function subtitleFor(filter: OrdersFilter, count: number): string {
+  if (count === 0) {
+    if (filter === 'food') return 'No food orders yet';
+    if (filter === 'ride') return 'No rides yet';
+    return 'Food delivery & ride history';
+  }
+  const noun = filter === 'food' ? 'food order' : filter === 'ride' ? 'ride' : 'order';
+  return `${count} ${noun}${count === 1 ? '' : 's'}`;
+}
+
+function emptyCopy(filter: OrdersFilter): { title: string; sub: string } {
+  if (filter === 'food') {
+    return {
+      title: 'No food orders',
+      sub: 'Order from a restaurant on Home — your deliveries will show here.',
+    };
+  }
+  if (filter === 'ride') {
+    return {
+      title: 'No rides yet',
+      sub: 'Book a ride from Home — your trip history will show here.',
+    };
+  }
+  return {
+    title: 'No orders yet',
+    sub: 'Book a ride or order food from Home — everything shows up here.',
+  };
+}
 
 export function OrdersListScreen({ navigation }: Props) {
+  const route = useRoute<ListRoute>();
+  const paramFilter = route.params?.filter;
+  const [filter, setFilter] = useState<OrdersFilter>(paramFilter ?? 'all');
+
+  useFocusEffect(
+    useCallback(() => {
+      if (paramFilter) {
+        setFilter(paramFilter);
+      }
+    }, [paramFilter])
+  );
+
   const { data, isLoading, refetch, isRefetching } = useQuery({
     queryKey: ['orders-unified'],
     queryFn: async () => {
@@ -50,6 +100,10 @@ export function OrdersListScreen({ navigation }: Props) {
     },
   });
 
+  const filtered = useMemo(() => filterRows(data ?? [], filter), [data, filter]);
+  const count = filtered.length;
+  const empty = emptyCopy(filter);
+
   if (isLoading) {
     return (
       <AppScreen tab eyebrow="Activity" title="Orders" subtitle="Food & rides in one place">
@@ -61,19 +115,18 @@ export function OrdersListScreen({ navigation }: Props) {
     );
   }
 
-  const count = data?.length ?? 0;
-
   return (
     <AppScreen
       tab
       scroll={false}
       eyebrow="Activity"
       title="Orders"
-      subtitle={count ? `${count} order${count === 1 ? '' : 's'}` : 'Food delivery & ride history'}
+      subtitle={subtitleFor(filter, count)}
     >
+      <OrdersFilterChips value={filter} onChange={setFilter} />
       <FlatList
         style={styles.listFlex}
-        data={data}
+        data={filtered}
         keyExtractor={(item) => `${item.type}-${item.id}`}
         onRefresh={() => void refetch()}
         refreshing={isRefetching}
@@ -81,11 +134,9 @@ export function OrdersListScreen({ navigation }: Props) {
         contentContainerStyle={styles.list}
         ListEmptyComponent={
           <GlassCard style={styles.empty}>
-            <Text style={styles.emptyEmoji}>📋</Text>
-            <Text style={styles.emptyTitle}>No orders yet</Text>
-            <Text style={styles.emptySub}>
-              Book a ride or order food from Home — everything shows up here.
-            </Text>
+            <Text style={styles.emptyEmoji}>{filter === 'ride' ? '🛺' : filter === 'food' ? '🍔' : '📋'}</Text>
+            <Text style={styles.emptyTitle}>{empty.title}</Text>
+            <Text style={styles.emptySub}>{empty.sub}</Text>
           </GlassCard>
         }
         renderItem={({ item }) => {

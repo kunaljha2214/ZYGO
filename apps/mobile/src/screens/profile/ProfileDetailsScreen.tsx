@@ -11,6 +11,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { StackScroll } from '../../components/layout/StackScroll';
 import { GlassCard } from '../../components/neon/GlassCard';
 import { ProfileDetailRow } from '../../components/profile/ProfileDetailRow';
+import { DobPickerSheet } from '../../components/profile/DobPickerSheet';
 import { AppTextInput } from '../../components/AppTextInput';
 import { Button } from '../../components/Button';
 import { AppAlert } from '../../alert';
@@ -21,8 +22,9 @@ import {
 } from '../../api/userProfile';
 import { useAuthStore } from '../../store/authStore';
 import { colors } from '../../theme';
+import { parseBirthDateString } from '../../utils/dateOfBirth';
 
-type EditKind = 'name' | 'dob' | 'emergency' | null;
+type EditKind = 'name' | 'emergency' | null;
 
 function formatPhoneDisplay(phone: string): string {
   const d = phone.replace(/\D/g, '');
@@ -36,8 +38,9 @@ export function ProfileDetailsScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editKind, setEditKind] = useState<EditKind>(null);
+  const [dobPickerOpen, setDobPickerOpen] = useState(false);
+  const [dobInitial, setDobInitial] = useState(() => parseBirthDateString(null));
   const [editName, setEditName] = useState('');
-  const [editDob, setEditDob] = useState('');
   const [editEcName, setEditEcName] = useState('');
   const [editEcPhone, setEditEcPhone] = useState('');
 
@@ -61,13 +64,30 @@ export function ProfileDetailsScreen() {
     if (!profile) return;
     if (kind === 'name') {
       setEditName(profile.name);
-    } else if (kind === 'dob') {
-      setEditDob(profile.dateOfBirth ?? '');
     } else if (kind === 'emergency') {
       setEditEcName(profile.emergencyContact?.name ?? '');
       setEditEcPhone(profile.emergencyContact?.phone ?? '');
     }
     setEditKind(kind);
+  }
+
+  function openDobPicker() {
+    if (!profile) return;
+    setDobInitial(parseBirthDateString(profile.dateOfBirth));
+    setDobPickerOpen(true);
+  }
+
+  async function saveDob(apiValue: string) {
+    setSaving(true);
+    try {
+      const updated = await updateUserProfile({ dateOfBirth: apiValue });
+      setProfile(updated);
+      setDobPickerOpen(false);
+    } catch (e) {
+      AppAlert.alert('Save failed', e instanceof Error ? e.message : 'Could not save');
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function saveEdit() {
@@ -82,13 +102,6 @@ export function ProfileDetailsScreen() {
           return;
         }
         body = { name };
-      } else if (editKind === 'dob') {
-        const dob = editDob.trim();
-        if (!dob) {
-          AppAlert.alert('Date of birth', 'Enter your date of birth (DD/MM/YYYY)');
-          return;
-        }
-        body = { dateOfBirth: dob };
       } else if (editKind === 'emergency') {
         const name = editEcName.trim();
         const phone = editEcPhone.replace(/\D/g, '');
@@ -156,7 +169,7 @@ export function ProfileDetailsScreen() {
             value={profile.dateOfBirth}
             required={!profile.dateOfBirth}
             editable={canEditDob}
-            onPress={canEditDob ? () => openEdit('dob') : undefined}
+            onPress={canEditDob ? openDobPicker : undefined}
           />
           <ProfileDetailRow
             icon="🏅"
@@ -170,7 +183,6 @@ export function ProfileDetailsScreen() {
             required={!profile.emergencyContact}
             editable
             actionLabel={profile.emergencyContact ? undefined : 'Add'}
-            editable
             onPress={() => openEdit('emergency')}
             isLast
           />
@@ -181,15 +193,19 @@ export function ProfileDetailsScreen() {
         </Text>
       </StackScroll>
 
+      <DobPickerSheet
+        visible={dobPickerOpen}
+        initialDate={dobInitial}
+        saving={saving}
+        onCancel={() => !saving && setDobPickerOpen(false)}
+        onSave={(apiValue) => void saveDob(apiValue)}
+      />
+
       <Modal visible={editKind != null} animationType="slide" transparent>
         <Pressable style={styles.modalBackdrop} onPress={() => !saving && setEditKind(null)}>
           <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.modalTitle}>
-              {editKind === 'name'
-                ? 'Edit name'
-                : editKind === 'dob'
-                  ? 'Date of birth'
-                  : 'Emergency contact'}
+              {editKind === 'name' ? 'Edit name' : 'Emergency contact'}
             </Text>
             {editKind === 'name' ? (
               <AppTextInput
@@ -198,18 +214,6 @@ export function ProfileDetailsScreen() {
                 onChangeText={setEditName}
                 autoCapitalize="words"
               />
-            ) : null}
-            {editKind === 'dob' ? (
-              <>
-                <AppTextInput
-                  label="Date of birth"
-                  placeholder="DD/MM/YYYY"
-                  value={editDob}
-                  onChangeText={setEditDob}
-                  keyboardType="numbers-and-punctuation"
-                />
-                <Text style={styles.modalNote}>You can set this only once.</Text>
-              </>
             ) : null}
             {editKind === 'emergency' ? (
               <>
@@ -277,12 +281,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
     marginBottom: 16,
-  },
-  modalNote: {
-    color: colors.textMuted,
-    fontSize: 13,
-    marginTop: -8,
-    marginBottom: 8,
   },
   modalActions: {
     flexDirection: 'row',

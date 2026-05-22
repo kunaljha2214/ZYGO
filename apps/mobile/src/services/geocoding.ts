@@ -32,9 +32,12 @@ type NominatimAddress = {
 type MapboxFeature = {
   place_name?: string;
   text?: string;
+  place_type?: string[];
   center?: [number, number];
   geometry?: { type?: string; coordinates?: [number, number] };
 };
+
+export type PlaceSearchKind = 'city' | 'area' | 'all';
 
 function normalizeLatLng(lat: unknown, lng: unknown): { lat: number; lng: number } | null {
   const la = Number(lat);
@@ -127,13 +130,147 @@ async function reverseGeocodeMapbox(lat: number, lng: number, token: string): Pr
   return null;
 }
 
-async function searchPlacesMapbox(query: string, token: string): Promise<GeocodedPlace[]> {
-  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${encodeURIComponent(token)}&country=in&limit=8&types=address,poi,place,locality,neighborhood&language=en`;
+function mapboxFeatureToCityPlace(feature: MapboxFeature): GeocodedPlace | null {
+  const types = feature.place_type ?? [];
+  const cityLevel = types.some((t) => ['place', 'region'].includes(t));
+  if (types.length > 0 && !cityLevel) return null;
+
+  let lng: unknown;
+  let lat: unknown;
+  if (feature.center && feature.center.length >= 2) {
+    [lng, lat] = feature.center;
+  } else if (
+    feature.geometry?.type === 'Point' &&
+    feature.geometry.coordinates &&
+    feature.geometry.coordinates.length >= 2
+  ) {
+    [lng, lat] = feature.geometry.coordinates;
+  } else {
+    return null;
+  }
+  const coordinates = normalizeLatLng(lat, lng);
+  if (!coordinates) return null;
+
+  const cityName =
+    feature.text?.trim() ||
+    feature.place_name?.split(',')[0]?.trim() ||
+    '';
+  if (!cityName || looksLikeCoordinateLine(cityName)) return null;
+
+  const state = feature.place_name?.split(',')[1]?.trim();
+  const line1 = [cityName, state, 'India'].filter(Boolean).join(', ');
+  return { label: cityName, line1, coordinates };
+}
+
+async function searchPlacesMapbox(
+  query: string,
+  token: string,
+  kind: PlaceSearchKind
+): Promise<GeocodedPlace[]> {
+  const types =
+    kind === 'city'
+      ? 'place,region'
+      : kind === 'area'
+        ? 'locality,neighborhood,address,poi,street'
+        : 'address,poi,place,locality,neighborhood';
+  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${encodeURIComponent(token)}&country=in&limit=12&types=${types}&language=en`;
   const data = await fetchJson<{ features?: MapboxFeature[] }>(url);
   if (!data?.features?.length) return [];
-  return data.features
-    .map(mapboxFeatureToPlace)
-    .filter((p): p is GeocodedPlace => p != null);
+
+  const mapper =
+    kind === 'city'
+      ? mapboxFeatureToCityPlace
+      : mapboxFeatureToPlace;
+
+  const seen = new Set<string>();
+  const out: GeocodedPlace[] = [];
+  for (const feature of data.features) {
+    const place = mapper(feature);
+    if (!place) continue;
+    const key = place.label.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(place);
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+function nominatimCityName(
+  addr?: NominatimAddress,
+  name?: string,
+  type?: string
+): string | null {
+  const city = addr?.city || addr?.town || addr?.village;
+  if (city) return city;
+  if (type && ['city', 'town', 'village', 'administrative'].includes(type) && name) {
+    return name;
+  }
+  return name && !addr?.road && !addr?.house_number ? name : null;
+}
+
+async function searchCitiesNominatim(query: string): Promise<GeocodedPlace[]> {
+  const url = `${NOMINATIM}/search?q=${encodeURIComponent(query)}&format=json&limit=12&countrycodes=in&addressdetails=1&featuretype=city`;
+  const data = await fetchJson<
+    Array<{
+      lat: string;
+      lon: string;
+      display_name: string;
+      name?: string;
+      type?: string;
+      address?: NominatimAddress;
+    }>
+  >(url, { headers: HEADERS });
+
+  if (!data) return [];
+  const seen = new Set<string>();
+  const places: GeocodedPlace[] = [];
+  for (const item of data) {
+    const coordinates = normalizeLatLng(item.lat, item.lon);
+    if (!coordinates) continue;
+    const cityName = nominatimCityName(item.address, item.name, item.type);
+    if (!cityName) continue;
+    const key = cityName.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const state = item.address?.state;
+    places.push({
+      label: cityName,
+      line1: [cityName, state, 'India'].filter(Boolean).join(', '),
+      coordinates,
+    });
+    if (places.length >= 8) break;
+  }
+  return places;
+}
+
+async function searchAreasNominatim(query: string): Promise<GeocodedPlace[]> {
+  const url = `${NOMINATIM}/search?q=${encodeURIComponent(query)}&format=json&limit=12&countrycodes=in&addressdetails=1`;
+  const data = await fetchJson<
+    Array<{
+      lat: string;
+      lon: string;
+      display_name: string;
+      name?: string;
+      type?: string;
+      address?: NominatimAddress;
+    }>
+  >(url, { headers: HEADERS });
+
+  if (!data) return [];
+  const places: GeocodedPlace[] = [];
+  for (const item of data) {
+    if (item.type === 'city' || item.type === 'town' || item.type === 'administrative') {
+      continue;
+    }
+    const coordinates = normalizeLatLng(item.lat, item.lon);
+    if (!coordinates) continue;
+    const { line1, label } = formatFromNominatimAddress(item.display_name, item.address, item.name);
+    if (looksLikeCoordinateLine(label)) continue;
+    places.push({ line1, label, coordinates });
+    if (places.length >= 8) break;
+  }
+  return places;
 }
 
 async function reverseGeocodeNominatim(lat: number, lng: number): Promise<GeocodedPlace> {
@@ -163,14 +300,24 @@ export async function reverseGeocode(lat: number, lng: number): Promise<Geocoded
   return reverseGeocodeNominatim(lat, lng);
 }
 
-export async function searchPlaces(query: string): Promise<GeocodedPlace[]> {
+export async function searchPlaces(
+  query: string,
+  kind: PlaceSearchKind = 'all'
+): Promise<GeocodedPlace[]> {
   const q = query.trim();
-  if (q.length < 3) return [];
+  if (q.length < 2) return [];
 
   const token = mapboxAccessToken();
   if (token) {
-    const results = await searchPlacesMapbox(q, token);
+    const results = await searchPlacesMapbox(q, token, kind);
     if (results.length > 0) return results;
+  }
+
+  if (kind === 'city') {
+    return searchCitiesNominatim(q);
+  }
+  if (kind === 'area') {
+    return searchAreasNominatim(q);
   }
 
   const url = `${NOMINATIM}/search?q=${encodeURIComponent(q)}&format=json&limit=8&countrycodes=in&addressdetails=1`;

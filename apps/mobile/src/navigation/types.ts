@@ -19,8 +19,10 @@ export type HomeStackParamList = {
   RideTrack: { rideId: string };
 };
 
+export type OrdersFilter = 'all' | 'food' | 'ride';
+
 export type OrdersStackParamList = {
-  OrdersList: undefined;
+  OrdersList: { filter?: OrdersFilter } | undefined;
   FoodOrderDetail: { orderId: string };
   RideDetail: { rideId: string };
 };
@@ -29,6 +31,7 @@ export type ProfileStackParamList = {
   ProfileMain: undefined;
   ProfileDetails: undefined;
   SavedAddresses: undefined;
+  AddSavedAddress: undefined;
   ReferAndEarn: undefined;
 };
 
