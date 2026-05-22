@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { RideMapView } from '../rides/RideMapView';
 import { MapMarker } from '../rides/MapMarker';
+import { DriverMapMarker } from './DriverMapMarker';
 import { RouteLine } from './RouteLine';
 import { DemandHeatmap } from './DemandHeatmap';
 import { fetchDrivingRoute } from '../../services/mapboxDirections';
@@ -19,6 +20,7 @@ type Props = {
   pickup: Coord;
   drop: Coord;
   driver?: Coord | null;
+  vehicleType?: string;
   showHeatmap?: boolean;
   showDriverToPickup?: boolean;
   liveLabel?: string;
@@ -29,6 +31,7 @@ export function LiveRideMap({
   pickup,
   drop,
   driver,
+  vehicleType,
   showHeatmap = false,
   showDriverToPickup = false,
   liveLabel,
@@ -63,23 +66,33 @@ export function LiveRideMap({
   }, [driver?.lat, driver?.lng, pickup.lat, pickup.lng, showDriverToPickup]);
 
   const fitBounds = useMemo(() => {
-    const points: Coord[] = [pickup, drop];
-    if (driver && isFiniteCoord(driver)) points.push(driver);
+    const local: Coord[] = [pickup, drop];
+    if (driver && isFiniteCoord(driver)) local.push(driver);
+
+    const all: Coord[] = [...local];
     if (tripRoute?.length) {
       for (const [lng, lat] of tripRoute) {
         if (Number.isFinite(lat) && Number.isFinite(lng)) {
-          points.push({ lat, lng });
+          all.push({ lat, lng });
         }
       }
     }
-    return boundsFromLatLngPoints(points, 0.22);
+
+    const full = boundsFromLatLngPoints(all, 0.22);
+    if (!full) return boundsFromLatLngPoints(local, 0.22);
+
+    const latSpan = Math.abs(full.ne[1] - full.sw[1]);
+    const lngSpan = Math.abs(full.ne[0] - full.sw[0]);
+    if (latSpan > 0.12 || lngSpan > 0.12) {
+      return boundsFromLatLngPoints(local, 0.22);
+    }
+    return full;
   }, [pickup, drop, driver, tripRoute]);
 
-  const fitBoundsKey = useMemo(
-    () =>
-      `${pickup.lat.toFixed(5)},${pickup.lng.toFixed(5)},${drop.lat.toFixed(5)},${drop.lng.toFixed(5)},r${tripRoute?.length ?? 0}`,
-    [pickup, drop, tripRoute?.length]
-  );
+  const fitBoundsKey = useMemo(() => {
+    const hasDriver = driver && isFiniteCoord(driver) ? '1' : '0';
+    return `${pickup.lat.toFixed(5)},${pickup.lng.toFixed(5)},${drop.lat.toFixed(5)},${drop.lng.toFixed(5)},driver${hasDriver},r${tripRoute?.length ?? 0}`;
+  }, [pickup, drop, driver, tripRoute?.length]);
 
   const pickupPin = toMapCoordinate(pickup);
   const dropPin = toMapCoordinate(drop);
@@ -102,10 +115,14 @@ export function LiveRideMap({
         <MapMarker coordinate={pickupPin} identifier="pickup" pinColor="#22c55e" />
         <MapMarker coordinate={dropPin} identifier="drop" pinColor="#ef4444" />
         {driverPin ? (
-          <MapMarker coordinate={driverPin} identifier="driver" pinColor="#fbbf24" />
+          <DriverMapMarker coordinate={driverPin} vehicleType={vehicleType} />
         ) : null}
       </RideMapView>
-      {liveLabel ? <Text style={styles.live}>{liveLabel}</Text> : null}
+      {liveLabel ? (
+        <Text style={styles.live} pointerEvents="none">
+          {liveLabel}
+        </Text>
+      ) : null}
     </View>
   );
 }

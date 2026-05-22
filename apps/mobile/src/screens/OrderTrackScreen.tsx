@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
-import { RideMapView } from '../components/rides/RideMapView';
-import { MapMarker } from '../components/rides/MapMarker';
+import { LiveDeliveryMap } from '../components/map/LiveDeliveryMap';
 import { StackScroll } from '../components/layout/StackScroll';
 import { useRoute, type RouteProp } from '@react-navigation/native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -13,12 +12,20 @@ import { Card } from '../components/Card';
 import { shared } from '../theme/styles';
 import { connectOrderTracking, disconnectOrderTracking } from '../services/orderSocket';
 import { colors } from '../theme';
+import {
+  coordsFromGeoLocation,
+  restaurantIdFromOrder,
+} from '../utils/restaurantCoords';
+
+const TRACK_MAP_STATUSES = new Set(['rider_assigned', 'out_for_delivery']);
 
 type FoodOrder = {
   id: string;
   type: 'food';
   orderNumber: string;
+  restaurantId?: string | { id?: string; _id?: string };
   restaurantName?: string;
+  restaurantCoords?: { lat: number; lng: number } | null;
   items: { name: string; price: number; quantity: number }[];
   subtotal?: number;
   discountAmount?: number;
@@ -37,36 +44,67 @@ export function OrderTrackScreen() {
   const { orderId } = useRoute<R>().params;
   const qc = useQueryClient();
   const [riderPos, setRiderPos] = useState<{ lat: number; lng: number } | null>(null);
+  const [mapGestureActive, setMapGestureActive] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['order', orderId],
     queryFn: async () => {
       const { data: o } = await api.get<FoodOrder>(`/orders/${orderId}`);
+      const stored = o.restaurantCoords;
+      if (
+        stored?.lat != null &&
+        stored?.lng != null &&
+        Number.isFinite(stored.lat) &&
+        Number.isFinite(stored.lng)
+      ) {
+        return o;
+      }
+      const rid = restaurantIdFromOrder(o.restaurantId);
+      if (!rid) return o;
+      try {
+        const { data: rest } = await api.get<{
+          location?: { coordinates?: number[] };
+        }>(`/restaurants/${rid}`);
+        const coords = coordsFromGeoLocation(rest.location);
+        if (coords) return { ...o, restaurantCoords: coords };
+      } catch {
+        /* restaurant lookup optional */
+      }
       return o;
     },
-    refetchInterval: 5000});
+    refetchInterval: (q) => {
+      const status = q.state.data?.status;
+      if (status && TRACK_MAP_STATUSES.has(status)) return 5000;
+      return false;
+    },
+  });
+
+  const onRiderLocation = useCallback((payload: { lat: number; lng: number }) => {
+    setRiderPos({ lat: payload.lat, lng: payload.lng });
+  }, []);
 
   useEffect(() => {
-    if (!data || data.status !== 'out_for_delivery') return;
+    if (!data?.status || !TRACK_MAP_STATUSES.has(data.status)) return;
     const socket = connectOrderTracking(orderId);
-    socket.on('rider:location', (payload: { lat: number; lng: number }) => {
-      setRiderPos({ lat: payload.lat, lng: payload.lng });
-    });
+    socket.on('rider:location', onRiderLocation);
     return () => {
-      socket.off('rider:location');
+      socket.off('rider:location', onRiderLocation);
       disconnectOrderTracking();
     };
-  }, [orderId, data?.status]);
+  }, [orderId, data?.status, onRiderLocation]);
 
   useEffect(() => {
-    if (data?.riderLocation) setRiderPos(data.riderLocation);
-  }, [data?.riderLocation]);
+    if (data?.riderLocation) {
+      setRiderPos(data.riderLocation);
+    }
+  }, [data?.riderLocation?.lat, data?.riderLocation?.lng]);
 
   const cancelMut = useMutation({
     mutationFn: async () => {
       await api.patch(`/orders/${orderId}/cancel`);
     },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['order', orderId] })});
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['order', orderId] }),
+  });
 
   if (isLoading || !data) {
     return (
@@ -76,12 +114,26 @@ export function OrderTrackScreen() {
     );
   }
 
-  const drop = data.deliveryAddress.coordinates;
-  const showLiveMap =
-    (data.status === 'out_for_delivery' || data.status === 'rider_assigned') && drop && riderPos;
+  const customer = data.deliveryAddress.coordinates;
+  const restaurant = data.restaurantCoords ?? null;
+  const hasCustomer =
+    customer && Number.isFinite(customer.lat) && Number.isFinite(customer.lng);
+  const showMap = TRACK_MAP_STATUSES.has(data.status) && !!hasCustomer;
+
+  const liveRider = riderPos ?? data.riderLocation ?? null;
+  const showRiderOnMap =
+    !!liveRider &&
+    Number.isFinite(liveRider.lat) &&
+    Number.isFinite(liveRider.lng) &&
+    TRACK_MAP_STATUSES.has(data.status);
+  const showRiderLeg = data.status === 'out_for_delivery' && showRiderOnMap;
+  const hasRestaurant =
+    restaurant != null &&
+    Number.isFinite(restaurant.lat) &&
+    Number.isFinite(restaurant.lng);
 
   return (
-    <StackScroll>
+    <StackScroll nestedScrollEnabled scrollEnabled={!mapGestureActive}>
       <Text style={shared.orderNum}>{data.orderNumber}</Text>
       {data.restaurantName ? <Text style={shared.meta}>{data.restaurantName}</Text> : null}
       <Text style={shared.stat}>Status: {data.status.replace(/_/g, ' ')}</Text>
@@ -90,25 +142,27 @@ export function OrderTrackScreen() {
       ) : null}
       <StatusStepper kind="food" status={data.status} />
 
-      {showLiveMap ? (
-        <View style={styles.mapWrap}>
-          <RideMapView
+      {showMap && customer ? (
+        <View
+          style={styles.mapWrap}
+          onTouchStart={() => setMapGestureActive(true)}
+          onTouchEnd={() => setMapGestureActive(false)}
+          onTouchCancel={() => setMapGestureActive(false)}
+        >
+          <LiveDeliveryMap
             style={styles.map}
-            initialRegion={{
-              latitude: riderPos!.lat,
-              longitude: riderPos!.lng,
-              latitudeDelta: 0.04,
-              longitudeDelta: 0.04}}
-            region={{
-              latitude: riderPos!.lat,
-              longitude: riderPos!.lng,
-              latitudeDelta: 0.04,
-              longitudeDelta: 0.04}}
-          >
-            <MapMarker coordinate={{ latitude: riderPos!.lat, longitude: riderPos!.lng }} title="Rider" pinColor="#7c3aed" />
-            <MapMarker coordinate={{ latitude: drop.lat, longitude: drop.lng }} title="You" pinColor="#22c55e" />
-          </RideMapView>
-          <Text style={styles.live}>Live rider tracking</Text>
+            restaurant={hasRestaurant ? restaurant : null}
+            customer={customer}
+            rider={showRiderOnMap ? liveRider : null}
+            showRiderLeg={showRiderLeg}
+            liveLabel={
+              !hasRestaurant
+                ? 'Live map · restaurant route unavailable for this order'
+                : showRiderOnMap
+                  ? 'Restaurant → you · live rider on map (updates every few seconds)'
+                  : 'Restaurant → you · waiting for rider GPS…'
+            }
+          />
         </View>
       ) : null}
 
@@ -121,9 +175,7 @@ export function OrderTrackScreen() {
         ))}
         {(data.discountAmount ?? 0) > 0 ? (
           <>
-            <Text style={shared.line}>
-              Subtotal ₹{(data.subtotal ?? data.total).toFixed(2)}
-            </Text>
+            <Text style={shared.line}>Subtotal ₹{(data.subtotal ?? data.total).toFixed(2)}</Text>
             <Text style={[shared.line, { color: '#4ade80' }]}>
               Coupon {data.couponCode} −₹{(data.discountAmount ?? 0).toFixed(2)}
             </Text>
@@ -149,10 +201,17 @@ export function OrderTrackScreen() {
   );
 }
 
-const mapH = Math.min(220, Dimensions.get('window').height * 0.28);
+const mapH = Math.min(240, Dimensions.get('window').height * 0.32);
 
 const styles = StyleSheet.create({
   eta: { color: colors.primaryBright, fontWeight: '700', marginBottom: 8 },
-  mapWrap: { marginVertical: 12, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: colors.cardBorder },
-  map: { width: '100%', height: mapH },
-  live: { textAlign: 'center', color: colors.textMuted, padding: 8, fontSize: 12 }});
+  mapWrap: {
+    marginVertical: 12,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    height: mapH,
+  },
+  map: { flex: 1, width: '100%', height: '100%' },
+});

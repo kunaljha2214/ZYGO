@@ -8,6 +8,7 @@ import { DeliveryPartnerTabs } from './DeliveryPartnerTabs';
 import { DeliveryEarningsScreen } from '../screens/delivery/DeliveryEarningsScreen';
 import { DeliveryWalletScreen } from '../screens/delivery/DeliveryWalletScreen';
 import { DeliveryHistoryScreen } from '../screens/delivery/DeliveryHistoryScreen';
+import { ReferAndEarnScreen } from '../screens/profile/ReferAndEarnScreen';
 import { DeliveryActiveScreen } from '../screens/delivery/DeliveryActiveScreen';
 import { DeliveryRequestModal } from '../components/delivery/DeliveryRequestModal';
 import { connectDeliverySocket } from '../services/deliverySocket';
@@ -85,7 +86,7 @@ function DeliverySocketLayer() {
   return (
     <DeliveryRequestModal
       onAccepted={() => {
-        navigation.navigate('DeliveryActive');
+        navigation.navigate('DeliveryTabs', { screen: 'DeliveryTrip' });
       }}
     />
   );
@@ -99,7 +100,8 @@ export function DeliveryPartnerStack() {
         <Stack.Screen name="DeliveryActive" component={DeliveryActiveScreen} options={{ title: 'Active delivery' }} />
         <Stack.Screen name="DeliveryEarnings" component={DeliveryEarningsScreen} options={{ title: 'Earnings' }} />
         <Stack.Screen name="DeliveryWallet" component={DeliveryWalletScreen} options={{ title: 'Wallet' }} />
-        <Stack.Screen name="DeliveryHistory" component={DeliveryHistoryScreen} options={{ title: 'History' }} />
+        <Stack.Screen name="DeliveryHistory" component={DeliveryHistoryScreen} options={{ title: 'Delivery history' }} />
+        <Stack.Screen name="ReferAndEarn" component={ReferAndEarnScreen} options={{ title: 'Refer & earn' }} />
       </Stack.Navigator>
     </>
   );

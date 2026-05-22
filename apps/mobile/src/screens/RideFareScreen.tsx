@@ -1,15 +1,12 @@
 import React, { useEffect, useState } from 'react';
-
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { StackScroll } from '../components/layout/StackScroll';
-
 import type { HomeStackProps } from '../navigation/types';
-
 import { api } from '../api/client';
-
 import { Button } from '../components/Button';
-
 import { Card } from '../components/Card';
+import { LiveRideMap } from '../components/map/LiveRideMap';
+import { isFiniteCoord } from '../components/rides/mapTypes';
 import { shared } from '../theme/styles';
 import { colors } from '../theme';
 
@@ -24,7 +21,6 @@ type Props = HomeStackProps<'RideFare'>;
 
 
 export function RideFareScreen({ navigation, route }: Props) {
-
   const { pickup, drop } = route.params;
 
   const [vehicleType, setVehicleType] = useState<string>('bike');
@@ -40,6 +36,7 @@ export function RideFareScreen({ navigation, route }: Props) {
   const [booking, setBooking] = useState(false);
 
   const [bookErr, setBookErr] = useState<string | null>(null);
+  const [mapGestureActive, setMapGestureActive] = useState(false);
 
 
 
@@ -147,8 +144,29 @@ export function RideFareScreen({ navigation, route }: Props) {
 
 
 
+  const pickupCoord = pickup.coordinates;
+  const dropCoord = drop.coordinates;
+  const showRouteMap =
+    isFiniteCoord(pickupCoord) && isFiniteCoord(dropCoord);
+
   return (
-    <StackScroll>
+    <StackScroll nestedScrollEnabled scrollEnabled={!mapGestureActive}>
+      {showRouteMap ? (
+        <View
+          style={shared.mapBox}
+          onTouchStart={() => setMapGestureActive(true)}
+          onTouchEnd={() => setMapGestureActive(false)}
+          onTouchCancel={() => setMapGestureActive(false)}
+        >
+          <LiveRideMap
+            style={shared.map}
+            pickup={pickupCoord}
+            drop={dropCoord}
+            liveLabel="Pickup → drop · confirm your route below"
+          />
+        </View>
+      ) : null}
+
       <Card glow style={styles.tripCard}>
         <Text style={shared.label}>Pickup</Text>
         <Text style={styles.placeLine} numberOfLines={3}>

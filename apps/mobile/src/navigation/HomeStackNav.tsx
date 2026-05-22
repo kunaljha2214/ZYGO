@@ -18,7 +18,7 @@ export function HomeStackNav() {
   return (
     <Stack.Navigator screenOptions={stackScreenOptions}>
       <Stack.Screen name="HomeMenu" component={HomeMenuScreen} options={{ title: 'Zygo' }} />
-      <Stack.Screen name="RestaurantList" component={RestaurantListScreen} options={{ title: 'Restaurants' }} />
+      <Stack.Screen name="RestaurantList" component={RestaurantListScreen} options={{ headerShown: false }} />
       <Stack.Screen name="RestaurantDetail" component={RestaurantDetailScreen} options={{ title: 'Menu' }} />
       <Stack.Screen name="Cart" component={CartScreen} options={{ title: 'Cart' }} />
       <Stack.Screen name="Checkout" component={CheckoutScreen} options={{ title: 'Checkout' }} />

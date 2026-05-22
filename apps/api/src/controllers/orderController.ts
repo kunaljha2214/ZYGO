@@ -142,10 +142,13 @@ export async function createOrder(
 
     const orderTotal = Math.max(0, Math.round((subtotal - discountAmount) * 100) / 100);
 
+    const [lng, lat] = restaurant.location.coordinates;
     const order = await FoodOrder.create({
       userId: req.user.sub,
       restaurantId: restaurant._id,
       orderNumber: generateOrderNumber(),
+      restaurantName: restaurant.name,
+      restaurantCoords: { lat, lng },
       items: lineItems,
       subtotal,
       discountAmount,
@@ -179,9 +182,9 @@ export async function listOrders(
     }
     const orders = await FoodOrder.find({ userId: req.user.sub })
       .sort({ createdAt: -1 })
-      .populate('restaurantId', 'name')
+      .populate('restaurantId', 'name location')
       .lean();
-    res.json(orders.map(formatOrderLean));
+    res.json(orders.map((o) => formatOrderLean(o as Record<string, unknown>)));
   } catch (e) {
     next(e);
   }
@@ -201,13 +204,24 @@ export async function getOrder(
       _id: req.params.id,
       userId: req.user.sub,
     })
-      .populate('restaurantId', 'name')
+      .populate('restaurantId', 'name location')
       .lean();
     if (!order) {
       next(createError(404));
       return;
     }
-    res.json(formatOrderLean(order as Record<string, unknown>));
+    const formatted = formatOrderLean(order as Record<string, unknown>);
+    const storedCoords = (order as { restaurantCoords?: { lat?: number } }).restaurantCoords;
+    if (formatted.restaurantCoords && !storedCoords?.lat) {
+      void FoodOrder.updateOne(
+        { _id: formatted.id },
+        {
+          restaurantCoords: formatted.restaurantCoords,
+          ...(formatted.restaurantName ? { restaurantName: formatted.restaurantName } : {}),
+        }
+      );
+    }
+    res.json(formatted);
   } catch (e) {
     next(e);
   }
@@ -243,15 +257,46 @@ export async function cancelOrder(
   }
 }
 
+type PopulatedRestaurant = {
+  name?: string;
+  location?: { coordinates?: number[] };
+};
+
+function coordsFromRestaurantLocation(
+  rest: PopulatedRestaurant | null | undefined
+): { lat: number; lng: number } | null {
+  const c = rest?.location?.coordinates;
+  if (!c || c.length < 2 || !Number.isFinite(c[0]) || !Number.isFinite(c[1])) {
+    return null;
+  }
+  return { lat: c[1], lng: c[0] };
+}
+
+function resolveRestaurantCoords(
+  stored: { lat?: number; lng?: number } | null | undefined,
+  rest: PopulatedRestaurant | null | undefined
+): { lat: number; lng: number } | null {
+  if (
+    stored?.lat != null &&
+    stored?.lng != null &&
+    Number.isFinite(stored.lat) &&
+    Number.isFinite(stored.lng)
+  ) {
+    return { lat: stored.lat, lng: stored.lng };
+  }
+  return coordsFromRestaurantLocation(rest);
+}
+
 function formatOrder(doc: InstanceType<typeof FoodOrder>) {
   const o = doc.toObject();
-  const rest = o.restaurantId as unknown as { name?: string } | undefined;
+  const rest = o.restaurantId as unknown as PopulatedRestaurant | undefined;
+  const restaurantCoords = resolveRestaurantCoords(o.restaurantCoords, rest);
   return {
     id: o._id,
     type: 'food' as const,
     orderNumber: o.orderNumber,
     restaurantId: o.restaurantId,
-    restaurantName: rest?.name,
+    restaurantName: o.restaurantName ?? rest?.name,
     items: o.items,
     subtotal: o.subtotal ?? o.total,
     discountAmount: o.discountAmount ?? 0,
@@ -263,20 +308,25 @@ function formatOrder(doc: InstanceType<typeof FoodOrder>) {
     estimatedPrepMinutes: o.estimatedPrepMinutes,
     deliveryStatus: o.deliveryStatus,
     deliveryEtaMinutes: o.deliveryEtaMinutes,
+    restaurantCoords,
     riderLocation: o.riderLastLocation,
     createdAt: o.createdAt,
   };
 }
 
 function formatOrderLean(o: Record<string, unknown>) {
-  const rest = o.restaurantId as { name?: string } | undefined;
+  const rest = o.restaurantId as PopulatedRestaurant | undefined;
   const total = o.total as number;
+  const restaurantCoords = resolveRestaurantCoords(
+    o.restaurantCoords as { lat?: number; lng?: number } | null | undefined,
+    rest
+  );
   return {
     id: o._id,
     type: 'food' as const,
     orderNumber: o.orderNumber,
     restaurantId: o.restaurantId,
-    restaurantName: rest?.name,
+    restaurantName: (o.restaurantName as string | undefined) ?? rest?.name,
     items: o.items,
     subtotal: (o.subtotal as number | undefined) ?? total,
     discountAmount: (o.discountAmount as number | undefined) ?? 0,
@@ -288,6 +338,7 @@ function formatOrderLean(o: Record<string, unknown>) {
     estimatedPrepMinutes: o.estimatedPrepMinutes,
     deliveryStatus: o.deliveryStatus,
     deliveryEtaMinutes: o.deliveryEtaMinutes,
+    restaurantCoords,
     riderLocation: o.riderLastLocation,
     createdAt: o.createdAt,
   };

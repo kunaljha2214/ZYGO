@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { AppAlert } from '../../alert';
 import {
   View,
@@ -6,7 +6,8 @@ import {
   StyleSheet,
   ActivityIndicator,
   Platform,
-  PermissionsAndroid} from 'react-native';
+  PermissionsAndroid,
+} from 'react-native';
 import Geolocation from '@react-native-community/geolocation';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -14,7 +15,7 @@ import { AppScreen } from '../../components/layout/AppScreen';
 import { RegistrationLogoutButton } from '../../components/auth/RegistrationLogoutButton';
 import { MetricCard } from '../../components/dashboard/MetricCard';
 import { DriverOnlineToggle } from '../../components/driver/DriverOnlineToggle';
-import { DriverMapPlaceholder } from '../../components/driver/DriverMapPlaceholder';
+import { DriverHubMap } from '../../components/driver/DriverHubMap';
 import { DriverMenuLink } from '../../components/driver/DriverMenuLink';
 import {
   fetchActiveRide,
@@ -22,21 +23,29 @@ import {
   fetchDriverEarningsDashboard,
   fetchIncomingRide,
   setDriverOnline,
-  updateDriverLocation} from '../../api/driver';
+  updateDriverLocation,
+} from '../../api/driver';
+import { getDriverHubCache, setDriverHubCache } from '../../store/driverHubCache';
+import { setDriverProfileCache } from '../../store/partnerProfileCache';
 import { useDriverRequestStore } from '../../store/driverRequestStore';
 import type { DriverPartnerStackParamList } from '../../navigation/types';
 import { colors, spacing } from '../../theme';
+import { formatInr } from '../../utils/formatMoney';
 
 type Nav = NativeStackNavigationProp<DriverPartnerStackParamList>;
 
 export function DriverHubScreen() {
   const navigation = useNavigation<Nav>();
-  const [loading, setLoading] = useState(true);
-  const [online, setOnline] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [earnings, setEarnings] = useState<Awaited<ReturnType<typeof fetchDriverEarningsDashboard>> | null>(
-    null
-  );
+  const cached = getDriverHubCache();
+  const hasLoadedOnce = useRef(!!cached);
+  const busyFixDone = useRef(false);
+
+  const [refreshing, setRefreshing] = useState(!cached);
+  const [online, setOnline] = useState(cached?.online ?? false);
+  const [togglePending, setTogglePending] = useState(false);
+  const toggleLock = useRef(false);
+  const [mapGestureActive, setMapGestureActive] = useState(false);
+  const [earnings, setEarnings] = useState(cached?.earnings ?? null);
   const incoming = useDriverRequestStore((s) => s.incoming);
   const setIncoming = useDriverRequestStore((s) => s.setIncoming);
   const setDriverOnlineStore = useDriverRequestStore((s) => s.setDriverOnline);
@@ -58,116 +67,155 @@ export function DriverHubScreen() {
   }, []);
 
   const readCoords = useCallback(
-    (): Promise<{ lat: number; lng: number } | null> =>
+    (fast = false): Promise<{ lat: number; lng: number } | null> =>
       new Promise((resolve) => {
         Geolocation.getCurrentPosition(
           (pos) =>
             resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
           () => resolve(null),
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+          fast
+            ? { enableHighAccuracy: false, timeout: 5000, maximumAge: 120_000 }
+            : { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
         );
       }),
     []
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [p, e, active] = await Promise.all([
-        fetchDriverProfile(),
-        fetchDriverEarningsDashboard(),
-        fetchActiveRide(),
-      ]);
-      setOnline(p.isOnline);
-      setDriverOnlineStore(p.isOnline);
-      setEarnings(e);
-      if (p.isBusy && !active) {
-        const coords = await readCoords();
-        await setDriverOnline(false);
-        if (coords) {
-          await updateDriverLocation(coords.lat, coords.lng);
-          const again = await setDriverOnline(true, coords);
-          setOnline(again.isOnline);
-          setDriverOnlineStore(again.isOnline);
-          if (again.incomingRequest) setIncoming(again.incomingRequest);
+  const load = useCallback(
+    async (silent: boolean) => {
+      if (silent || hasLoadedOnce.current) {
+        setRefreshing(true);
+      }
+
+      try {
+        const [p, e, active] = await Promise.all([
+          fetchDriverProfile(),
+          fetchDriverEarningsDashboard(),
+          fetchActiveRide(),
+        ]);
+
+        setOnline(p.isOnline);
+        setDriverOnlineStore(p.isOnline);
+        setDriverProfileCache(p);
+        setEarnings(e);
+        setDriverHubCache({ online: p.isOnline, earnings: e });
+        hasLoadedOnce.current = true;
+
+        if (p.isBusy && !active && !busyFixDone.current) {
+          busyFixDone.current = true;
+          const coords = await readCoords(true);
+          await setDriverOnline(false);
+          if (coords) {
+            await updateDriverLocation(coords.lat, coords.lng);
+            const again = await setDriverOnline(true, coords);
+            setOnline(again.isOnline);
+            setDriverOnlineStore(again.isOnline);
+            setDriverHubCache({
+              online: again.isOnline,
+              earnings: e,
+            });
+            if (again.incomingRequest) setIncoming(again.incomingRequest);
+          }
+          AppAlert.alert(
+            'Availability fixed',
+            'Stuck “busy” state was cleared. Stay Online to receive bike ride requests.'
+          );
         }
-        AppAlert.alert(
-          'Availability fixed',
-          'Stuck “busy” state was cleared. Stay Online to receive bike ride requests.'
-        );
+
+        if (p.isOnline) {
+          pushLocation();
+          const req = await fetchIncomingRide();
+          if (req) setIncoming(req);
+        } else if (!silent) {
+          setIncoming(null);
+        }
+
+        if (active && !silent) {
+          navigation.navigate('DriverActive');
+        }
+      } finally {
+        setRefreshing(false);
       }
-      if (p.isOnline) {
-        pushLocation();
-        const req = await fetchIncomingRide();
-        if (req) setIncoming(req);
-      }
-      if (active) navigation.navigate('DriverActive');
-    } finally {
-      setLoading(false);
-    }
-  }, [navigation, pushLocation, readCoords, setDriverOnlineStore, setIncoming]);
+    },
+    [navigation, pushLocation, readCoords, setDriverOnlineStore, setIncoming]
+  );
 
   useFocusEffect(
     useCallback(() => {
-      void load();
+      void load(hasLoadedOnce.current);
+      return undefined;
     }, [load])
   );
 
-  const toggleOnline = async (value: boolean) => {
-    setBusy(true);
-    try {
-      let coords: { lat: number; lng: number } | null = null;
-      if (value) {
-        const granted = await ensureLocationPermission();
-        if (!granted) {
-          AppAlert.alert('Location needed', 'Allow location access to receive ride requests near you.');
-          return;
-        }
-        coords = await readCoords();
-        if (coords) {
-          await updateDriverLocation(coords.lat, coords.lng);
-        }
-      }
-      const res = await setDriverOnline(value, coords ?? undefined);
-      setOnline(res.isOnline);
-      setDriverOnlineStore(res.isOnline);
-      if (value) {
-        if (res.incomingRequest) {
-          setIncoming(res.incomingRequest);
-        } else {
-          const req = await fetchIncomingRide();
-          if (req) setIncoming(req);
-        }
-        AppAlert.alert(
-          'You are online',
-          'Stay on this app with Online ON. When a customer books a Bike ride, Accept/Reject appears within ~90 seconds. If you booked first on another device, the offer is re-sent now.'
-        );
-      } else {
-        setIncoming(null);
-      }
-    } catch (e) {
-      AppAlert.alert('Error', e instanceof Error ? e.message : 'Something went wrong');
-    } finally {
-      setBusy(false);
-    }
-  };
+  const toggleOnline = useCallback(
+    async (value: boolean) => {
+      if (toggleLock.current) return;
+      toggleLock.current = true;
 
-  if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator color={colors.primaryBright} size="large" />
-      </View>
-    );
-  }
+      const previous = online;
+      setOnline(value);
+      setDriverOnlineStore(value);
+      setTogglePending(true);
+
+      try {
+        let coords: { lat: number; lng: number } | null = null;
+
+        if (value) {
+          const granted = await ensureLocationPermission();
+          if (!granted) {
+            setOnline(false);
+            setDriverOnlineStore(false);
+            AppAlert.alert('Location needed', 'Allow location access to receive ride requests near you.');
+            return;
+          }
+          coords = await readCoords(true);
+        }
+
+        const res = await setDriverOnline(value, coords ?? undefined);
+        setOnline(res.isOnline);
+        setDriverOnlineStore(res.isOnline);
+        if (earnings) {
+          setDriverHubCache({ online: res.isOnline, earnings });
+        }
+
+        if (value) {
+          if (res.incomingRequest) setIncoming(res.incomingRequest);
+          void fetchIncomingRide().then((req) => {
+            if (req) setIncoming(req);
+          });
+          pushLocation();
+        } else {
+          setIncoming(null);
+        }
+      } catch (e) {
+        setOnline(previous);
+        setDriverOnlineStore(previous);
+        AppAlert.alert('Error', e instanceof Error ? e.message : 'Something went wrong');
+      } finally {
+        setTogglePending(false);
+        toggleLock.current = false;
+      }
+    },
+    [online, ensureLocationPermission, readCoords, setDriverOnlineStore, setIncoming, pushLocation, earnings]
+  );
 
   return (
     <AppScreen
       scroll
+      scrollEnabled={!mapGestureActive}
+      nestedScrollEnabled
       tab
       eyebrow="Rides"
       title="Driver Hub"
       subtitle="Go online to receive real-time ride requests"
     >
+      {refreshing ? (
+        <View style={styles.refreshRow}>
+          <ActivityIndicator size="small" color={colors.primaryBright} />
+          <Text style={styles.refreshText}>Updating…</Text>
+        </View>
+      ) : null}
+
       <View style={styles.logoutRow}>
         <RegistrationLogoutButton />
       </View>
@@ -182,12 +230,18 @@ export function DriverHubScreen() {
         <Text style={styles.hint}>Online — waiting for rides near you…</Text>
       )}
 
-      <DriverOnlineToggle online={online} busy={busy} onToggle={(v) => void toggleOnline(v)} />
-      <DriverMapPlaceholder online={online} />
+      <DriverOnlineToggle online={online} pending={togglePending} onToggle={(v) => void toggleOnline(v)} />
+      <View
+        onTouchStart={() => setMapGestureActive(true)}
+        onTouchEnd={() => setMapGestureActive(false)}
+        onTouchCancel={() => setMapGestureActive(false)}
+      >
+        <DriverHubMap online={online} />
+      </View>
 
       <Text style={styles.section}>Quick stats</Text>
       <View style={styles.metrics}>
-        <MetricCard label="Today" value={`₹${earnings?.todayEarnings ?? 0}`} accent={colors.primaryBright} />
+        <MetricCard label="Today" value={formatInr(earnings?.todayEarnings)} accent={colors.primaryBright} />
         <MetricCard label="Rides" value={String(earnings?.todayRides ?? 0)} />
       </View>
       <View style={styles.metrics}>
@@ -219,8 +273,14 @@ export function DriverHubScreen() {
 }
 
 const styles = StyleSheet.create({
+  refreshRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: spacing.sm,
+  },
+  refreshText: { color: colors.textMuted, fontSize: 12 },
   logoutRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: spacing.sm },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   hint: { color: colors.textMuted, marginBottom: spacing.md, lineHeight: 20 },
   hintActive: { color: '#4ade80', fontWeight: '700', marginBottom: spacing.md },
   section: {
@@ -230,5 +290,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     textTransform: 'uppercase',
     marginBottom: spacing.sm,
-    marginTop: spacing.xs},
-  metrics: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md }});
+    marginTop: spacing.xs,
+  },
+  metrics: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md },
+});

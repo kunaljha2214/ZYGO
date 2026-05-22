@@ -14,6 +14,8 @@ import { useAppInsets } from '../hooks/useAppInsets';
 type Props = {
   children: ReactNode;
   scroll?: boolean;
+  scrollEnabled?: boolean;
+  nestedScrollEnabled?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
   keyboard?: boolean;
   /** Auth sign-in / sign-up only */
@@ -27,6 +29,8 @@ type Props = {
 export function ScreenShell({
   children,
   scroll,
+  scrollEnabled = true,
+  nestedScrollEnabled = false,
   contentStyle,
   keyboard,
   auth,
@@ -48,6 +52,8 @@ export function ScreenShell({
       contentContainerStyle={[styles.scroll, padStyle, contentStyle]}
       keyboardShouldPersistTaps="handled"
       showsVerticalScrollIndicator={false}
+      scrollEnabled={scrollEnabled}
+      nestedScrollEnabled={nestedScrollEnabled}
     >
       {children}
     </ScrollView>

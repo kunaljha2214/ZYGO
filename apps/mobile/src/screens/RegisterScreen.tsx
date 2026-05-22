@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import type { AuthStackProps } from '../navigation/types';
 import { Button } from '../components/Button';
@@ -9,6 +9,7 @@ import { GlassCard } from '../components/neon/GlassCard';
 import { SectionHeader } from '../components/neon/SectionHeader';
 import { api } from '../api/client';
 import { API_BASE_URL } from '../config/env';
+import { validateReferralCode } from '../api/referrals';
 import { colors, radii } from '../theme';
 
 type Props = AuthStackProps<'Register'>;
@@ -36,11 +37,61 @@ export function RegisterScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [referralCode, setReferralCode] = useState('');
+  const [referralStatus, setReferralStatus] = useState<
+    'idle' | 'checking' | 'valid' | 'invalid'
+  >('idle');
+  const [referralHint, setReferralHint] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  useEffect(() => {
+    const trimmed = referralCode.trim().toUpperCase();
+    if (!trimmed) {
+      setReferralStatus('idle');
+      setReferralHint(null);
+      return;
+    }
+    if (trimmed.length < 6) {
+      setReferralStatus('idle');
+      setReferralHint('Enter the full code from your friend');
+      return;
+    }
+    setReferralStatus('checking');
+    const timer = setTimeout(() => {
+      void validateReferralCode(trimmed)
+        .then((res) => {
+          if (res.valid) {
+            setReferralStatus('valid');
+            setReferralHint(
+              res.referrerName
+                ? `Referred by ${res.referrerName} · they earn ₹50 when you join`
+                : 'Valid referral code'
+            );
+          } else {
+            setReferralStatus('invalid');
+            setReferralHint(res.message ?? 'Invalid referral code');
+          }
+        })
+        .catch(() => {
+          setReferralStatus('idle');
+          setReferralHint(null);
+        });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [referralCode]);
+
   async function onSubmit() {
     setErr(null);
+    const code = referralCode.trim().toUpperCase();
+    if (code && referralStatus === 'invalid') {
+      setErr(referralHint ?? 'Invalid referral code');
+      return;
+    }
+    if (code && referralStatus === 'checking') {
+      setErr('Please wait while we verify the referral code');
+      return;
+    }
     setLoading(true);
     try {
       const body: Record<string, unknown> = {
@@ -48,9 +99,13 @@ export function RegisterScreen({ navigation }: Props) {
         email: email.trim(),
         phone: phone.trim(),
         password,
-        accountType};
+        accountType,
+      };
       if (accountType === 'driver') {
         body.driverVehicleType = vehicle;
+      }
+      if (code) {
+        body.referralCode = code;
       }
       const { data } = await api.post<{ sessionId: string; emailMask: string }>(
         '/auth/register/start',
@@ -139,8 +194,27 @@ export function RegisterScreen({ navigation }: Props) {
           secureTextEntry
           value={password}
           onChangeText={setPassword}
+        />
+        <AppTextInput
+          label="Referral code (optional)"
+          placeholder="e.g. ZYGOABC123"
+          autoCapitalize="characters"
+          autoCorrect={false}
+          value={referralCode}
+          onChangeText={(t) => setReferralCode(t.toUpperCase().replace(/\s/g, ''))}
           style={styles.lastField}
         />
+        {referralHint ? (
+          <Text
+            style={[
+              styles.referralHint,
+              referralStatus === 'valid' && styles.referralOk,
+              referralStatus === 'invalid' && styles.referralBad,
+            ]}
+          >
+            {referralStatus === 'checking' ? 'Checking code…' : referralHint}
+          </Text>
+        ) : null}
       </GlassCard>
 
       {err ? <Text style={styles.err}>{err}</Text> : null}
@@ -172,5 +246,9 @@ const styles = StyleSheet.create({
   chipText: { fontWeight: '600', color: colors.textSecondary, fontSize: 14 },
   chipTextActive: { color: colors.text, fontWeight: '700' },
   lastField: { marginBottom: 0 },
+  referralHint: { marginTop: 8, fontSize: 13, color: colors.textSecondary, lineHeight: 18 },
+  referralOk: { color: colors.primaryBright },
+  referralBad: { color: colors.error },
   err: { color: colors.error, marginBottom: 14, lineHeight: 20 },
-  gap: { height: 12 }});
+  gap: { height: 12 },
+});

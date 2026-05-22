@@ -1,24 +1,24 @@
 import React from 'react';
-import { View, Text, StyleSheet, Switch } from 'react-native';
+import { View, Text, StyleSheet, Switch, ActivityIndicator } from 'react-native';
 import { colors, radii, spacing } from '../../theme';
 
 type Props = {
   online: boolean;
-  busy?: boolean;
+  pending?: boolean;
   onToggle: (value: boolean) => void;
 };
 
-export function DriverOnlineToggle({ online, busy, onToggle }: Props) {
+export function DriverOnlineToggle({ online, pending, onToggle }: Props) {
   return (
     <View style={[styles.wrap, online && styles.wrapOn]}>
       <View style={styles.dotRow}>
         <View style={[styles.dot, online && styles.dotOn]} />
         <Text style={styles.label}>{online ? 'You are online' : 'You are offline'}</Text>
+        {pending ? <ActivityIndicator size="small" color={colors.primaryBright} /> : null}
       </View>
       <Switch
         value={online}
         onValueChange={onToggle}
-        disabled={busy}
         trackColor={{ false: colors.chip, true: colors.primary }}
         thumbColor={colors.text}
       />
@@ -45,7 +45,7 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 6,
   },
-  dotRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  dotRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   dot: {
     width: 10,
     height: 10,
@@ -53,5 +53,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.textMuted,
   },
   dotOn: { backgroundColor: '#4ade80' },
-  label: { color: colors.text, fontWeight: '800', fontSize: 16 },
+  label: { color: colors.text, fontWeight: '800', fontSize: 16, flexShrink: 1 },
 });

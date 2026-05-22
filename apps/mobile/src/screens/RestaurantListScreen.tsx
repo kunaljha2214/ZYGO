@@ -1,133 +1,111 @@
 import React from 'react';
-
-import { View, Text, FlatList, Pressable, ActivityIndicator } from 'react-native';
-import { useAppInsets } from '../hooks/useAppInsets';
-
+import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
-
 import type { HomeStackProps } from '../navigation/types';
-
 import { api } from '../api/client';
-
-import { Card } from '../components/Card';
-
-import { colors } from '../theme';
-
-import { shared } from '../theme/styles';
-
-
+import { AppScreen } from '../components/layout/AppScreen';
+import { StackBackHeader } from '../components/layout/StackBackHeader';
+import { GlassCard } from '../components/neon/GlassCard';
+import { RestaurantListCard } from '../components/food/RestaurantListCard';
+import { colors, spacing } from '../theme';
 
 type Restaurant = {
-
   id: string;
-
   name: string;
-
   cuisine: string[];
-
   rating: number;
-
   image?: string;
-
 };
-
-
 
 type Props = HomeStackProps<'RestaurantList'>;
 
-
-
 export function RestaurantListScreen({ navigation }: Props) {
-  const inset = useAppInsets({ header: true });
-
-  const { data, isLoading, error } = useQuery({
-
+  const { data, isLoading, error, refetch, isRefetching } = useQuery({
     queryKey: ['restaurants'],
-
     queryFn: async () => {
-
       const { data: list } = await api.get<Restaurant[]>('/restaurants');
-
       return list;
-
-    }});
-
-
+    },
+  });
 
   if (isLoading) {
-
     return (
-
-      <View style={shared.center}>
-
-        <ActivityIndicator size="large" color={colors.primary} />
-
-      </View>
-
+      <AppScreen scroll={false}>
+        <StackBackHeader title="Restaurants" subtitle="Loading menus…" />
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={colors.primaryBright} />
+        </View>
+      </AppScreen>
     );
-
   }
-
-
 
   if (error) {
-
     return (
-
-      <View style={shared.center}>
-
-        <Text style={shared.err}>{error instanceof Error ? error.message : 'Error'}</Text>
-
-      </View>
-
+      <AppScreen scroll={false}>
+        <StackBackHeader title="Restaurants" />
+        <GlassCard style={styles.errorCard}>
+          <Text style={styles.errorText}>
+            {error instanceof Error ? error.message : 'Could not load restaurants'}
+          </Text>
+        </GlassCard>
+      </AppScreen>
     );
-
   }
 
-
+  const count = data?.length ?? 0;
 
   return (
-
-    <FlatList
-
-      contentContainerStyle={inset.listContent}
-
-      data={data ?? []}
-
-      keyExtractor={(item) => item.id}
-
-      ListEmptyComponent={
-        <View style={shared.center}>
-          <Text style={shared.muted}>No restaurants available right now.</Text>
-          <Text style={[shared.muted, { marginTop: 8, fontSize: 13 }]}>
-            Shops may be closed or still awaiting approval.
-          </Text>
-        </View>
-      }
-
-      renderItem={({ item }) => (
-
-        <Pressable onPress={() => navigation.navigate('RestaurantDetail', { id: item.id, title: item.name })}>
-
-          <Card glow>
-
-            <Text style={shared.name}>{item.name}</Text>
-
-            <Text style={shared.meta}>
-
-              ★ {item.rating.toFixed(1)} · {item.cuisine.join(', ')}
-
+    <AppScreen scroll={false}>
+      <StackBackHeader
+        title="Restaurants"
+        subtitle={count ? `${count} near you` : 'Food delivery'}
+      />
+      <FlatList
+        style={styles.list}
+        data={data ?? []}
+        keyExtractor={(item) => item.id}
+        onRefresh={() => void refetch()}
+        refreshing={isRefetching}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.listContent}
+        ListEmptyComponent={
+          <GlassCard style={styles.empty}>
+            <Text style={styles.emptyEmoji}>🍽️</Text>
+            <Text style={styles.emptyTitle}>No restaurants available</Text>
+            <Text style={styles.emptySub}>
+              Shops may be closed or still awaiting approval. Pull down to refresh.
             </Text>
-
-          </Card>
-
-        </Pressable>
-
-      )}
-
-    />
-
+          </GlassCard>
+        }
+        renderItem={({ item }) => (
+          <RestaurantListCard
+            name={item.name}
+            rating={item.rating}
+            cuisines={item.cuisine}
+            onPress={() =>
+              navigation.navigate('RestaurantDetail', { id: item.id, title: item.name })
+            }
+          />
+        )}
+      />
+    </AppScreen>
   );
-
 }
 
+const styles = StyleSheet.create({
+  center: { alignItems: 'center', paddingVertical: spacing.xl * 2 },
+  list: { flex: 1 },
+  listContent: { paddingBottom: spacing.xl },
+  errorCard: { paddingVertical: spacing.lg },
+  errorText: { color: colors.error, textAlign: 'center', lineHeight: 20 },
+  empty: { alignItems: 'center', paddingVertical: spacing.xl * 1.5 },
+  emptyEmoji: { fontSize: 36, marginBottom: spacing.md },
+  emptyTitle: { color: colors.lavender, fontWeight: '800', fontSize: 18, marginBottom: spacing.sm },
+  emptySub: {
+    color: colors.textMuted,
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: 'center',
+    paddingHorizontal: spacing.md,
+  },
+});

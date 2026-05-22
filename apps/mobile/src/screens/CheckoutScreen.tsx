@@ -1,18 +1,29 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { StackScroll } from '../components/layout/StackScroll';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { HomeStackProps } from '../navigation/types';
 import { Button } from '../components/Button';
 import { AppTextInput } from '../components/AppTextInput';
+import { LocationSearchField } from '../components/rides/LocationSearchField';
+import { LocationPickerModal } from '../components/rides/LocationPickerModal';
 import { api } from '../api/client';
 import { useCartStore } from '../store/cartStore';
 import {
   fetchRestaurantOffers,
   validateRestaurantCoupon,
   type ValidatedCoupon} from '../api/customerOffers';
+import { reverseGeocode, type GeocodedPlace } from '../services/geocoding';
+import { isFiniteCoord } from '../components/rides/mapTypes';
+import {
+  ensureLocationPermission,
+  getCurrentCoordinates,
+} from '../services/location';
+import { withTimeout } from '../utils/withTimeout';
 import { shared } from '../theme/styles';
 import { colors, radii } from '../theme';
+
+const DELIVERY_FALLBACK = { lat: 12.9716, lng: 77.5946 };
 
 type Props = HomeStackProps<'Checkout'>;
 
@@ -24,9 +35,14 @@ export function CheckoutScreen({ navigation }: Props) {
   const clear = useCartStore((s) => s.clear);
 
   const [label, setLabel] = useState('Home');
-  const [line1, setLine1] = useState('Indiranagar, Bangalore');
-  const [lat, setLat] = useState('12.9716');
-  const [lng, setLng] = useState('77.5946');
+  const [line1, setLine1] = useState('');
+  const [deliveryCoords, setDeliveryCoords] = useState<{ lat: number; lng: number } | null>(
+    null
+  );
+  const [deliveryFieldKey, setDeliveryFieldKey] = useState(0);
+  const [deliveryErr, setDeliveryErr] = useState<string | null>(null);
+  const [locatingDelivery, setLocatingDelivery] = useState(true);
+  const [mapPickerOpen, setMapPickerOpen] = useState(false);
   const [couponInput, setCouponInput] = useState('');
   const [applied, setApplied] = useState<ValidatedCoupon | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
@@ -41,6 +57,48 @@ export function CheckoutScreen({ navigation }: Props) {
 
   const discount = applied?.discountAmount ?? 0;
   const total = applied ? applied.finalTotal : subtotal;
+
+  const applyDelivery = useCallback((place: GeocodedPlace) => {
+    if (!isFiniteCoord(place.coordinates)) {
+      setDeliveryErr('Could not read that location. Try another result or pick on the map.');
+      return;
+    }
+    setDeliveryCoords(place.coordinates);
+    setLine1(place.line1);
+    setDeliveryFieldKey((k) => k + 1);
+    setDeliveryErr(null);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setLocatingDelivery(true);
+      setLine1('Detecting your location…');
+      const permission = await ensureLocationPermission();
+      if (permission !== 'granted') {
+        if (!cancelled) {
+          setLine1('');
+          setLocatingDelivery(false);
+        }
+        return;
+      }
+      try {
+        const c = await withTimeout(getCurrentCoordinates(), 22_000, 'GPS');
+        const place = await withTimeout(reverseGeocode(c.lat, c.lng), 12_000, 'address');
+        if (!cancelled) applyDelivery(place);
+      } catch {
+        if (!cancelled) {
+          setLine1('');
+          setDeliveryCoords(null);
+        }
+      } finally {
+        if (!cancelled) setLocatingDelivery(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [applyDelivery]);
 
   const { data: offers = [], isLoading: offersLoading } = useQuery({
     queryKey: ['restaurant-offers', restaurantId],
@@ -77,9 +135,20 @@ export function CheckoutScreen({ navigation }: Props) {
     setCouponError(null);
   };
 
+  const placeOrder = () => {
+    if (!deliveryCoords || !isFiniteCoord(deliveryCoords) || !line1.trim()) {
+      setDeliveryErr('Search or choose your delivery location on the map.');
+      return;
+    }
+    mutation.mutate();
+  };
+
   const mutation = useMutation({
     mutationFn: async () => {
       if (!restaurantId) throw new Error('No restaurant');
+      if (!deliveryCoords || !isFiniteCoord(deliveryCoords)) {
+        throw new Error('Delivery location is required');
+      }
       const { data } = await api.post<{ id: string }>('/orders', {
         restaurantId,
         items: items.map((i) => ({
@@ -89,9 +158,9 @@ export function CheckoutScreen({ navigation }: Props) {
           ...(i.addOnNames?.length ? { addOnNames: i.addOnNames } : {})})),
         ...(applied?.code ? { couponCode: applied.code } : {}),
         deliveryAddress: {
-          label,
-          line1,
-          coordinates: { lat: parseFloat(lat), lng: parseFloat(lng) }}});
+          label: label.trim() || 'Delivery',
+          line1: line1.trim(),
+          coordinates: deliveryCoords}});
       return data;
     },
     onSuccess: (data) => {
@@ -191,16 +260,37 @@ export function CheckoutScreen({ navigation }: Props) {
         </Pressable>
       ) : null}
 
-      <Text style={[shared.label, { marginTop: 16 }]}>Delivery address</Text>
-      <Text style={shared.label}>Address label</Text>
-      <AppTextInput value={label} onChangeText={setLabel} />
-      <Text style={shared.label}>Address line</Text>
-      <AppTextInput value={line1} onChangeText={setLine1} />
-      <Text style={shared.label}>Latitude / Longitude</Text>
-      <View style={shared.row}>
-        <AppTextInput style={shared.half} value={lat} onChangeText={setLat} keyboardType="decimal-pad" />
-        <AppTextInput style={shared.half} value={lng} onChangeText={setLng} keyboardType="decimal-pad" />
+      <Text style={[shared.label, { marginTop: 16 }]}>Delivery location</Text>
+      <Text style={shared.hint}>
+        Search or pick on the map like ride drop. Coordinates are saved automatically.
+      </Text>
+
+      <View style={styles.deliveryBox}>
+        {locatingDelivery ? (
+          <ActivityIndicator color={colors.primary} size="small" style={styles.deliverySpinner} />
+        ) : null}
+        <Text style={styles.deliveryLine} numberOfLines={4}>
+          {line1 || 'Search or choose delivery location on the map'}
+        </Text>
       </View>
+
+      <LocationSearchField
+        key={`delivery-${deliveryFieldKey}`}
+        label="Search delivery address"
+        value={line1}
+        placeholder="Search area, street, landmark (e.g. MG Road)"
+        onSelect={applyDelivery}
+      />
+      <Button
+        title="Choose delivery location on map"
+        variant="ghost"
+        onPress={() => setMapPickerOpen(true)}
+      />
+
+      <Text style={shared.label}>Address label (optional)</Text>
+      <AppTextInput value={label} onChangeText={setLabel} placeholder="Home, Work, Other" />
+
+      {deliveryErr ? <Text style={shared.err}>{deliveryErr}</Text> : null}
 
       {mutation.error ? (
         <Text style={shared.err}>
@@ -210,10 +300,25 @@ export function CheckoutScreen({ navigation }: Props) {
 
       <Button
         title={`Place order (COD) · ₹${total.toFixed(2)}`}
-        onPress={() => mutation.mutate()}
+        onPress={placeOrder}
         loading={mutation.isPending}
         disabled={items.length === 0}
       />
+
+      {mapPickerOpen ? (
+        <LocationPickerModal
+          visible
+          kind="drop"
+          title="Delivery location"
+          hint="Tap the map, a place name (POI), or drag the pin. Coordinates are saved when you confirm."
+          fallback={deliveryCoords ?? DELIVERY_FALLBACK}
+          onClose={() => setMapPickerOpen(false)}
+          onConfirm={(place) => {
+            applyDelivery(place);
+            setMapPickerOpen(false);
+          }}
+        />
+      ) : null}
     </StackScroll>
   );
 }
@@ -263,4 +368,18 @@ const styles = StyleSheet.create({
     alignItems: 'center'},
   applyBtnDisabled: { opacity: 0.6 },
   applyBtnText: { color: '#fff', fontWeight: '800' },
-  removeCoupon: { color: colors.lavender, fontWeight: '600', marginBottom: 8 }});
+  removeCoupon: { color: colors.lavender, fontWeight: '600', marginBottom: 8 },
+  deliveryBox: {
+    backgroundColor: colors.inputBg,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.inputBorder,
+    padding: 14,
+    marginBottom: 8,
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  deliverySpinner: { marginRight: 10 },
+  deliveryLine: { flex: 1, color: colors.text, fontSize: 16, lineHeight: 22 },
+});

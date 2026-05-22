@@ -3,6 +3,8 @@ import { create } from 'zustand';
 import { disconnectDriverSocket } from '../services/driverSocket';
 import { disconnectDeliverySocket } from '../services/deliverySocket';
 import { useDriverRequestStore } from './driverRequestStore';
+import { clearDriverHubCache } from './driverHubCache';
+import { clearDriverProfileCache } from './partnerProfileCache';
 import { useDeliveryRequestStore } from './deliveryRequestStore';
 import { queryClient } from '../queryClient';
 import { api } from '../api/client';
@@ -53,6 +55,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     disconnectDeliverySocket();
     useDriverRequestStore.getState().setIncoming(null);
     useDriverRequestStore.getState().setDriverOnline(false);
+    clearDriverHubCache();
+    clearDriverProfileCache();
     useDeliveryRequestStore.getState().setIncoming(null);
     queryClient.clear();
 

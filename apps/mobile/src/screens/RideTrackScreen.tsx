@@ -39,6 +39,7 @@ export function RideTrackScreen() {
   const { rideId } = useRoute<R>().params;
   const qc = useQueryClient();
   const [driverPos, setDriverPos] = useState<{ lat: number; lng: number } | null>(null);
+  const [mapGestureActive, setMapGestureActive] = useState(false);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['ride', rideId],
@@ -91,15 +92,20 @@ export function RideTrackScreen() {
   const pickup = data.pickup.coordinates;
   const drop = data.drop.coordinates;
   const showLiveMap = LIVE_STATUSES.has(data.status);
-  const showDriverLeg =
+  const liveDriver = driverPos ?? data.driverLastLocation ?? null;
+  const showDriverOnMap =
     showLiveMap &&
-    driverPos &&
+    !!liveDriver &&
+    Number.isFinite(liveDriver.lat) &&
+    Number.isFinite(liveDriver.lng);
+  const showDriverLeg =
+    showDriverOnMap &&
     data.status !== 'in_progress' &&
     data.status !== 'completed';
   const cancellable = data.status !== 'in_progress' && data.status !== 'completed';
 
   return (
-    <StackScroll>
+    <StackScroll nestedScrollEnabled scrollEnabled={!mapGestureActive}>
       <Text style={shared.fareAccent}>₹{data.fare.toFixed(2)}</Text>
       <Text style={shared.metaCap}>
         {data.vehicleType} · {data.status.replace(/_/g, ' ')}
@@ -112,23 +118,35 @@ export function RideTrackScreen() {
       ) : null}
       <StatusStepper kind="ride" status={data.status} />
 
-      {showLiveMap ? (
-        <LiveRideMap
-          style={styles.mapWrap}
-          pickup={pickup}
-          drop={drop}
-          driver={driverPos}
-          showDriverToPickup={showDriverLeg}
-          liveLabel={driverPos ? 'Live captain tracking' : 'Waiting for captain GPS…'}
-        />
-      ) : (
-        <LiveRideMap
-          style={styles.mapWrap}
-          pickup={pickup}
-          drop={drop}
-          showHeatmap
-        />
-      )}
+      <View
+        onTouchStart={() => setMapGestureActive(true)}
+        onTouchEnd={() => setMapGestureActive(false)}
+        onTouchCancel={() => setMapGestureActive(false)}
+      >
+        {showLiveMap ? (
+          <LiveRideMap
+            style={styles.mapWrap}
+            pickup={pickup}
+            drop={drop}
+            driver={showDriverOnMap ? liveDriver : null}
+            vehicleType={data.vehicleType}
+            showDriverToPickup={showDriverLeg}
+            liveLabel={
+              showDriverOnMap
+                ? 'Pickup → drop · live captain on map (updates every few seconds)'
+                : 'Pickup → drop · waiting for captain GPS…'
+            }
+          />
+        ) : (
+          <LiveRideMap
+            style={styles.mapWrap}
+            pickup={pickup}
+            drop={drop}
+            liveLabel="Pickup → drop route"
+            showHeatmap
+          />
+        )}
+      </View>
 
       <Card glow style={shared.block}>
         <Text style={shared.h}>Pickup</Text>

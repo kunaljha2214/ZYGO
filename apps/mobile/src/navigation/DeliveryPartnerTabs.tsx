@@ -3,7 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text } from 'react-native';
 import type { DeliveryPartnerTabParamList } from './types';
 import { DeliveryHubScreen } from '../screens/delivery/DeliveryHubScreen';
-import { DeliveryActiveScreen } from '../screens/delivery/DeliveryActiveScreen';
+import { DeliveryTripScreen } from '../screens/delivery/DeliveryTripScreen';
 import { PartnerAccountScreen } from '../screens/PartnerAccountScreen';
 import { tabScreenOptions } from '../theme';
 
@@ -11,7 +11,10 @@ const Tab = createBottomTabNavigator<DeliveryPartnerTabParamList>();
 
 export function DeliveryPartnerTabs() {
   return (
-    <Tab.Navigator screenOptions={{ headerShown: false, ...tabScreenOptions }}>
+    <Tab.Navigator
+      screenOptions={{ headerShown: false, ...tabScreenOptions }}
+      detachInactiveScreens={false}
+    >
       <Tab.Screen
         name="DeliveryHub"
         component={DeliveryHubScreen}
@@ -19,13 +22,13 @@ export function DeliveryPartnerTabs() {
       />
       <Tab.Screen
         name="DeliveryTrip"
-        component={DeliveryActiveScreen}
+        component={DeliveryTripScreen}
         options={{ tabBarLabel: 'Trip', tabBarIcon: () => <Text style={{ fontSize: 20 }}>🚴</Text> }}
       />
       <Tab.Screen
         name="PartnerAccount"
         component={PartnerAccountScreen}
-        options={{ tabBarLabel: 'Account', tabBarIcon: () => <Text style={{ fontSize: 20 }}>👤</Text> }}
+        options={{ tabBarLabel: 'Profile', tabBarIcon: () => <Text style={{ fontSize: 20 }}>👤</Text> }}
       />
     </Tab.Navigator>
   );

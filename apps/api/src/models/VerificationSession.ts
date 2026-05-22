@@ -13,6 +13,7 @@ export interface IVerificationSession extends Document {
   otpHash: string;
   expiresAt: Date;
   attempts: number;
+  referralCode?: string | null;
 }
 
 const VerificationSessionSchema = new Schema<IVerificationSession>(
@@ -35,6 +36,7 @@ const VerificationSessionSchema = new Schema<IVerificationSession>(
     otpHash: { type: String, required: true },
     expiresAt: { type: Date, required: true },
     attempts: { type: Number, default: 0 },
+    referralCode: { type: String, default: null, uppercase: true, trim: true },
   },
   { timestamps: true }
 );

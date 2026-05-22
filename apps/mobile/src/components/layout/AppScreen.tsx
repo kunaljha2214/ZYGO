@@ -6,6 +6,8 @@ import { PageHeader } from './PageHeader';
 type Props = {
   children: ReactNode;
   scroll?: boolean;
+  scrollEnabled?: boolean;
+  nestedScrollEnabled?: boolean;
   title?: string;
   subtitle?: string;
   eyebrow?: string;
@@ -19,6 +21,8 @@ type Props = {
 export function AppScreen({
   children,
   scroll = true,
+  scrollEnabled = true,
+  nestedScrollEnabled = false,
   title,
   subtitle,
   eyebrow,
@@ -30,6 +34,8 @@ export function AppScreen({
   return (
     <ScreenShell
       scroll={scroll}
+      scrollEnabled={scrollEnabled}
+      nestedScrollEnabled={nestedScrollEnabled}
       keyboard={keyboard}
       tab={tab}
       header={header}

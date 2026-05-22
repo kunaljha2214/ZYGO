@@ -39,6 +39,7 @@ r.post(
       .optional()
       .isIn(['bike', 'auto', 'car'])
       .withMessage('Invalid vehicle type'),
+    body('referralCode').optional().trim().isLength({ min: 6, max: 16 }),
     body().custom((_, { req }) => {
       const t = req.body?.accountType as string;
       const v = req.body?.driverVehicleType as string | undefined;

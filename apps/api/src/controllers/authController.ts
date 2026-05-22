@@ -12,6 +12,13 @@ import { JWT_EXPIRES_DAYS } from '../config/app';
 import { sendVerificationOtp } from '../utils/email';
 import { maskEmail } from '../utils/mask';
 import { normalizePhone } from '../utils/phone';
+import {
+  applyReferralOnSignup,
+  ensureUserReferralCode,
+  findReferrerByCode,
+  normalizeReferralCode,
+  validateReferralForSignup,
+} from '../services/referralService';
 
 const OTP_EXPIRY_MS = 15 * 60 * 1000;
 const MAX_OTP_ATTEMPTS = 5;
@@ -34,6 +41,7 @@ export async function registerStart(
       email: string;
       accountType: RegistrationAccountType;
       driverVehicleType?: 'bike' | 'auto' | 'car';
+      referralCode?: string;
     };
 
     const email = body.email.trim().toLowerCase();
@@ -51,6 +59,13 @@ export async function registerStart(
     const dupEmail = await User.findOne({ email });
     if (dupEmail) {
       next(createError(409, 'Email already registered'));
+      return;
+    }
+
+    const referralNormalized = normalizeReferralCode(body.referralCode);
+    const referralCheck = await validateReferralForSignup(referralNormalized, phone);
+    if (!referralCheck.valid) {
+      next(createError(400, referralCheck.message ?? 'Invalid referral code'));
       return;
     }
 
@@ -80,6 +95,7 @@ export async function registerStart(
       otpHash,
       expiresAt,
       attempts: 0,
+      referralCode: referralNormalized,
     });
 
     await sendVerificationOtp(email, otp, body.name.trim());
@@ -155,7 +171,20 @@ export async function registerVerify(
         session.accountType === 'driver' || session.accountType === 'delivery_partner'
           ? true
           : false,
+      referralWalletBalance: 0,
+      referralCount: 0,
     });
+
+    await ensureUserReferralCode(user);
+
+    let referralBonus: { credited: boolean; amount: number } | null = null;
+    const sessionReferral = normalizeReferralCode(session.referralCode);
+    if (sessionReferral) {
+      const referrer = await findReferrerByCode(sessionReferral);
+      if (referrer && referrer._id.toString() !== user._id.toString()) {
+        referralBonus = await applyReferralOnSignup(referrer, user);
+      }
+    }
 
     await VerificationSession.deleteOne({ _id: session._id });
 
@@ -163,6 +192,7 @@ export async function registerVerify(
     res.status(201).json({
       accessToken: token,
       user: sanitizeUser(user),
+      referralBonus,
     });
   } catch (e) {
     next(e);

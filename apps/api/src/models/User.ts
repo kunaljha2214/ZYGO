@@ -37,6 +37,11 @@ export interface IUser extends Document {
     type: 'Point';
     coordinates: [number, number];
   } | null;
+  /** Unique code this user shares (e.g. ZYGO7X4K2P). */
+  referralCode?: string | null;
+  referredByUserId?: Types.ObjectId | null;
+  referralWalletBalance: number;
+  referralCount: number;
 }
 
 const SavedAddressSchema = new Schema<ISavedAddress>(
@@ -91,6 +96,10 @@ const UserSchema = new Schema<IUser>(
         type: [Number],
       },
     },
+    referralCode: { type: String, unique: true, sparse: true, uppercase: true, trim: true },
+    referredByUserId: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+    referralWalletBalance: { type: Number, default: 0, min: 0 },
+    referralCount: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true }
 );

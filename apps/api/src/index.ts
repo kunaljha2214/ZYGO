@@ -28,6 +28,7 @@ import shopOwnerRoutes from './routes/shopOwnerRoutes';
 
 import deliveryPartnerRoutes from './routes/deliveryPartnerRoutes';
 import driverRoutes from './routes/driverRoutes';
+import referralRoutes from './routes/referralRoutes';
 
 import { buildRideRoutes } from './routes/rideRoutes';
 
@@ -81,6 +82,7 @@ v1.use('/shop', shopOwnerRoutes);
 
 v1.use('/delivery-partner', deliveryPartnerRoutes);
 v1.use('/driver', driverRoutes);
+v1.use('/referrals', referralRoutes);
 
 v1.use(foodRoutes);
 

@@ -45,7 +45,7 @@ export function PartnerTabs() {
       <Tab.Screen
         name="PartnerAccount"
         component={PartnerAccountScreen}
-        options={{ tabBarLabel: 'Account', tabBarIcon: () => <Text style={{ fontSize: 20 }}>👤</Text> }}
+        options={{ tabBarLabel: 'Profile', tabBarIcon: () => <Text style={{ fontSize: 20 }}>👤</Text> }}
       />
     </Tab.Navigator>
   );

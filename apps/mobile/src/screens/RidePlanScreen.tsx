@@ -178,7 +178,12 @@ export function RidePlanScreen({ navigation }: Props) {
         onTouchCancel={() => setMapGestureActive(false)}
       >
         {drop && isFiniteCoord(pickup) && isFiniteCoord(drop) ? (
-          <LiveRideMap style={shared.map} pickup={pickup} drop={drop} />
+          <LiveRideMap
+            style={shared.map}
+            pickup={pickup}
+            drop={drop}
+            liveLabel="Pickup → drop route"
+          />
         ) : (
           <RideMapView
             style={shared.map}

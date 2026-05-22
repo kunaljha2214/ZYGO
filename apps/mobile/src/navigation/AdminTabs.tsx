@@ -23,7 +23,7 @@ export function AdminTabs() {
         name="AdminAccount"
         component={AccountScreen}
         options={{
-          tabBarLabel: 'Account',
+          tabBarLabel: 'Profile',
           tabBarIcon: () => <Text style={{ fontSize: 20 }}>👤</Text>,
         }}
       />

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { PartnerTabs } from './PartnerTabs';
+import { PartnerShellStack } from './PartnerShellStack';
 import { DeliveryPartnerStack } from './DeliveryPartnerStack';
 import { DriverPartnerStack } from './DriverPartnerStack';
 import { useAuthStore } from '../store/authStore';
@@ -17,6 +18,12 @@ import { DeliveryStatusScreen } from '../screens/delivery/DeliveryStatusScreen';
 import { DriverRegistrationScreen } from '../screens/driver/DriverRegistrationScreen';
 import { DriverStatusScreen } from '../screens/driver/DriverStatusScreen';
 import { colors } from '../theme';
+import {
+  driverGateModeFromProfile,
+  getDriverProfileCache,
+  setDriverProfileCache,
+  type PartnerGateMode,
+} from '../store/partnerProfileCache';
 
 export function PartnerStack() {
   const token = useAuthStore((s) => s.token);
@@ -24,16 +31,19 @@ export function PartnerStack() {
   const isShopOwner = user?.role === 'shop_owner';
   const isDeliveryPartner = user?.role === 'delivery_partner';
   const isDriver = user?.role === 'driver';
+  const driverSnap = isDriver ? getDriverProfileCache() : null;
 
   if (!token) {
     return null;
   }
 
-  const [loading, setLoading] = useState(isShopOwner || isDeliveryPartner || isDriver);
+  const [loading, setLoading] = useState(isShopOwner || isDeliveryPartner);
   const [registration, setRegistration] = useState<OwnerRestaurantRegistration | null>(null);
   const [deliveryProfile, setDeliveryProfile] = useState<DeliveryPartnerProfile | null>(null);
-  const [driverProfile, setDriverProfile] = useState<DriverProfile | null>(null);
-  const [mode, setMode] = useState<'register' | 'status' | 'app'>('app');
+  const [driverProfile, setDriverProfile] = useState<DriverProfile | null>(
+    driverSnap?.profile ?? null
+  );
+  const [mode, setMode] = useState<PartnerGateMode>(driverSnap?.mode ?? 'app');
 
   const refresh = useCallback(async () => {
     if (isShopOwner) {
@@ -77,25 +87,13 @@ export function PartnerStack() {
     }
 
     if (isDriver) {
-      setLoading(true);
       try {
         const profile = await fetchDriverProfile();
         setDriverProfile(profile);
-        if (profile.approvalStatus === 'draft') {
-          setMode('register');
-        } else if (
-          profile.approvalStatus === 'pending' ||
-          profile.approvalStatus === 'rejected' ||
-          profile.approvalStatus === 'blocked'
-        ) {
-          setMode('status');
-        } else {
-          setMode('app');
-        }
+        setDriverProfileCache(profile);
+        setMode(driverGateModeFromProfile(profile));
       } catch {
-        setMode('register');
-      } finally {
-        setLoading(false);
+        if (!getDriverProfileCache()) setMode('register');
       }
       return;
     }
@@ -190,7 +188,7 @@ export function PartnerStack() {
     );
   }
 
-  return <PartnerTabs />;
+  return <PartnerShellStack />;
 }
 
 const styles = StyleSheet.create({

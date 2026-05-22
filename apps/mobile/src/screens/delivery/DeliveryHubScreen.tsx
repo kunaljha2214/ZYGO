@@ -11,8 +11,11 @@ import {
   PermissionsAndroid} from 'react-native';
 import Geolocation from '@react-native-community/geolocation';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import type { CompositeNavigationProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AppScreen } from '../../components/layout/AppScreen';
+import { DeliveryHubMap } from '../../components/delivery/DeliveryHubMap';
 import { MetricCard } from '../../components/dashboard/MetricCard';
 import {
   fetchActiveDelivery,
@@ -21,10 +24,13 @@ import {
   setPartnerOnline,
   updatePartnerLocation} from '../../api/deliveryPartner';
 import { useDeliveryRequestStore } from '../../store/deliveryRequestStore';
-import type { DeliveryPartnerStackParamList } from '../../navigation/types';
+import type { DeliveryPartnerStackParamList, DeliveryPartnerTabParamList } from '../../navigation/types';
 import { colors, spacing } from '../../theme';
 
-type Nav = NativeStackNavigationProp<DeliveryPartnerStackParamList>;
+type Nav = CompositeNavigationProp<
+  BottomTabNavigationProp<DeliveryPartnerTabParamList, 'DeliveryHub'>,
+  NativeStackNavigationProp<DeliveryPartnerStackParamList>
+>;
 
 export function DeliveryHubScreen() {
   const navigation = useNavigation<Nav>();
@@ -32,6 +38,7 @@ export function DeliveryHubScreen() {
   const [online, setOnline] = useState(false);
   const [busy, setBusy] = useState(false);
   const [earnings, setEarnings] = useState<Awaited<ReturnType<typeof fetchEarningsDashboard>> | null>(null);
+  const [mapGestureActive, setMapGestureActive] = useState(false);
   const incoming = useDeliveryRequestStore((s) => s.incoming);
 
   const ensureLocationPermission = useCallback(async () => {
@@ -60,7 +67,7 @@ export function DeliveryHubScreen() {
       ]);
       setOnline(p.isOnline);
       setEarnings(e);
-      if (active) navigation.navigate('DeliveryActive');
+      if (active) navigation.navigate('DeliveryTrip');
     } catch {
       /* gated by PartnerStack */
     } finally {
@@ -105,7 +112,15 @@ export function DeliveryHubScreen() {
   }
 
   return (
-    <AppScreen scroll tab title="Delivery" subtitle="Go online to receive real-time orders">
+    <AppScreen
+      scroll
+      scrollEnabled={!mapGestureActive}
+      nestedScrollEnabled
+      tab
+      eyebrow="Delivery"
+      title="Delivery Hub"
+      subtitle="Go online to receive real-time orders"
+    >
       {!online ? (
         <Text style={styles.hint}>
           Turn on Online before the shop marks an order ready — otherwise you will not get delivery requests.
@@ -123,6 +138,14 @@ export function DeliveryHubScreen() {
           disabled={busy}
           trackColor={{ true: colors.primary, false: colors.chip }}
         />
+      </View>
+
+      <View
+        onTouchStart={() => setMapGestureActive(true)}
+        onTouchEnd={() => setMapGestureActive(false)}
+        onTouchCancel={() => setMapGestureActive(false)}
+      >
+        <DeliveryHubMap online={online} />
       </View>
 
       {earnings ? (

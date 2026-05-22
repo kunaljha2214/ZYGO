@@ -6,6 +6,7 @@ import { MetricCard } from '../../components/dashboard/MetricCard';
 import { Card } from '../../components/Card';
 import { fetchDriverWallet } from '../../api/driver';
 import { colors, spacing } from '../../theme';
+import { formatInr } from '../../utils/formatMoney';
 
 export function DriverWalletScreen() {
   const [wallet, setWallet] = useState<Awaited<ReturnType<typeof fetchDriverWallet>> | null>(null);
@@ -27,10 +28,10 @@ export function DriverWalletScreen() {
   return (
     <StackScroll>
       <View style={styles.row}>
-        <MetricCard label="Pending" value={`₹${wallet.pending}`} />
-        <MetricCard label="Withdrawable" value={`₹${wallet.withdrawable}`} accent={colors.primaryBright} />
+        <MetricCard label="Pending" value={formatInr(wallet.pending)} />
+        <MetricCard label="Withdrawable" value={formatInr(wallet.withdrawable)} accent={colors.primaryBright} />
       </View>
-      <MetricCard label="Total earned" value={`₹${wallet.totalEarned}`} wide />
+      <MetricCard label="Total earned" value={formatInr(wallet.totalEarned)} wide />
       <Card>
         <Text style={styles.section}>Recent ledger</Text>
         <FlatList
@@ -39,9 +40,10 @@ export function DriverWalletScreen() {
           scrollEnabled={false}
           renderItem={({ item }) => (
             <View style={styles.entry}>
-              <Text style={styles.entryTitle}>+₹{item.driverEarned}</Text>
+              <Text style={styles.entryTitle}>+{formatInr(item.driverEarned)}</Text>
               <Text style={styles.entrySub}>
-                Fare ₹{item.amount} · Platform ₹{item.platformFee} · {item.type} · {item.status}
+                Fare {formatInr(item.amount)} · Platform {formatInr(item.platformFee)} · {item.type} ·{' '}
+                {item.status}
               </Text>
             </View>
           )}

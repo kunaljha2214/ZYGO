@@ -1,8 +1,8 @@
 import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, FlatList } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { StackScroll } from '../../components/layout/StackScroll';
-import { Card } from '../../components/Card';
+import { AppScreen } from '../../components/layout/AppScreen';
+import { GlassCard } from '../../components/neon/GlassCard';
 import { fetchDriverHistory } from '../../api/driver';
 import { colors, spacing, radii } from '../../theme';
 
@@ -21,22 +21,24 @@ export function DriverHistoryScreen() {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color={colors.primaryBright} />
-      </View>
+      <AppScreen scroll eyebrow="Captain" title="Ride history" subtitle="Loading…">
+        <View style={styles.center}>
+          <ActivityIndicator color={colors.primaryBright} />
+        </View>
+      </AppScreen>
     );
   }
 
   return (
-    <StackScroll>
+    <AppScreen scroll eyebrow="Captain" title="Ride history" subtitle="Past trips & earnings">
       <FlatList
         data={history}
         keyExtractor={(h) => h.id}
         scrollEnabled={false}
         renderItem={({ item }) => (
-          <Card>
+          <GlassCard style={styles.rowCard}>
             <View style={styles.row}>
-              <Text style={styles.earn}>₹{item.driverEarned}</Text>
+              <Text style={styles.earn}>₹{item.driverEarned.toFixed(2)}</Text>
               <Text style={styles.km}>{item.distanceKm} km</Text>
             </View>
             <Text style={styles.pickup}>{item.pickup}</Text>
@@ -44,21 +46,23 @@ export function DriverHistoryScreen() {
             {item.customerRating ? (
               <Text style={styles.rating}>Customer rated {item.customerRating}★</Text>
             ) : null}
-          </Card>
+          </GlassCard>
         )}
         ListEmptyComponent={
-          <Card>
+          <GlassCard style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>No rides yet</Text>
             <Text style={styles.emptySub}>Completed trips will show here with earnings.</Text>
-          </Card>
+          </GlassCard>
         }
       />
-    </StackScroll>
+    </AppScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  center: { alignItems: 'center', paddingVertical: spacing.xl },
+  rowCard: { marginBottom: spacing.md },
+  emptyCard: { alignItems: 'center', paddingVertical: spacing.xl },
   row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
   earn: { color: '#4ade80', fontWeight: '800', fontSize: 20 },
   km: { color: colors.lavender, fontWeight: '700' },

@@ -27,6 +27,8 @@ export type OrdersStackParamList = {
 
 export type ProfileStackParamList = {
   ProfileMain: undefined;
+  SavedAddresses: undefined;
+  ReferAndEarn: undefined;
 };
 
 export type MainTabParamList = {
@@ -56,11 +58,12 @@ export type DeliveryPartnerTabParamList = {
 };
 
 export type DeliveryPartnerStackParamList = {
-  DeliveryTabs: undefined;
+  DeliveryTabs: NavigatorScreenParams<DeliveryPartnerTabParamList> | undefined;
   DeliveryActive: undefined;
   DeliveryEarnings: undefined;
   DeliveryWallet: undefined;
   DeliveryHistory: undefined;
+  ReferAndEarn: undefined;
 };
 
 export type DriverPartnerTabParamList = {
@@ -70,11 +73,12 @@ export type DriverPartnerTabParamList = {
 };
 
 export type DriverPartnerStackParamList = {
-  DriverTabs: undefined;
+  DriverTabs: NavigatorScreenParams<DriverPartnerTabParamList> | undefined;
   DriverActive: undefined;
   DriverEarnings: undefined;
   DriverWallet: undefined;
   DriverHistory: undefined;
+  ReferAndEarn: undefined;
 };
 
 export type ShopInsightsStackParamList = {

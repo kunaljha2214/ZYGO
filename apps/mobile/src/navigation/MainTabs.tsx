@@ -7,7 +7,6 @@ import type { MainTabParamList } from './types';
 import { HomeStackNav } from './HomeStackNav';
 
 import { OrdersStackNav } from './OrdersStackNav';
-
 import { ProfileStackNav } from './ProfileStackNav';
 
 import { Text, View, StyleSheet } from 'react-native';
