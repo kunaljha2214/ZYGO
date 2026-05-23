@@ -16,8 +16,14 @@ export type UserProfileDetails = {
   dateOfBirthLocked: boolean;
   memberSince: string;
   emergencyContact: EmergencyContact | null;
+  profilePhotoUrl: string | null;
   createdAt: string;
 };
+
+export async function uploadUserProfilePhoto(dataUrl: string) {
+  const { data } = await api.post<UserProfileDetails>('/users/profile/photo', { dataUrl });
+  return data;
+}
 
 export type UpdateUserProfileBody = {
   name?: string;

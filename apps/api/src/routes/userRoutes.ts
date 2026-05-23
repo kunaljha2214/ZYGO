@@ -31,7 +31,17 @@ const updateProfileHandler: RequestHandler = (req, res, next) => {
   void users.updateProfile(req as AuthedRequest, res, next);
 };
 
+const uploadProfilePhotoHandler: RequestHandler = (req, res, next) => {
+  void users.uploadProfilePhoto(req as AuthedRequest, res, next);
+};
+
 r.get('/profile', getProfileHandler);
+
+r.post(
+  '/profile/photo',
+  [body('dataUrl').trim().notEmpty().withMessage('Image data required')],
+  uploadProfilePhotoHandler
+);
 
 r.patch(
   '/profile',

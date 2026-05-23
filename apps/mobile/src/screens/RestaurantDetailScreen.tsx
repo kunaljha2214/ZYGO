@@ -1,5 +1,5 @@
 import React, { useLayoutEffect } from 'react';
-import { View, Text, FlatList, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import type { HomeStackProps } from '../navigation/types';
 import { api } from '../api/client';
@@ -47,12 +47,32 @@ export function RestaurantDetailScreen({ navigation, route }: Props) {
     }});
 
   useLayoutEffect(() => {
-    if (title) {
-      navigation.setOptions({ title });
-    } else if (data?.name) {
-      navigation.setOptions({ title: data.name });
-    }
-  }, [navigation, title, data?.name]);
+    const screenTitle = title ?? data?.name ?? 'Menu';
+    navigation.setOptions({
+      title: screenTitle,
+      headerRight:
+        cartCount > 0
+          ? () => (
+              <Pressable
+                onPress={() => {
+                  setRestaurant(id, data?.name ?? title ?? 'Restaurant');
+                  navigation.navigate('Cart');
+                }}
+                style={styles.cartHeaderBtn}
+                hitSlop={10}
+                accessibilityLabel={`Cart, ${cartCount} items`}
+              >
+                <Text style={styles.cartIcon}>🛒</Text>
+                <View style={styles.cartBadge}>
+                  <Text style={styles.cartBadgeText}>
+                    {cartCount > 99 ? '99+' : cartCount}
+                  </Text>
+                </View>
+              </Pressable>
+            )
+          : undefined,
+    });
+  }, [navigation, title, data?.name, id, cartCount, setRestaurant]);
 
   if (isLoading) {
     return (
@@ -76,19 +96,6 @@ export function RestaurantDetailScreen({ navigation, route }: Props) {
       data={data.menu}
       keyExtractor={(item) => item.id}
       extraData={cartItems}
-      ListHeaderComponent={
-        <Pressable
-          onPress={() => {
-            setRestaurant(data.id, data.name);
-            navigation.navigate('Cart');
-          }}
-          style={shared.cartLink}
-        >
-          <Text style={shared.cartLinkText}>
-            {cartCount > 0 ? `View cart (${cartCount} items) →` : 'View cart →'}
-          </Text>
-        </Pressable>
-      }
       renderItem={({ item }) => (
         <Card>
           <View style={shared.row}>
@@ -114,3 +121,33 @@ export function RestaurantDetailScreen({ navigation, route }: Props) {
     />
   );
 }
+
+const styles = StyleSheet.create({
+  cartHeaderBtn: {
+    marginRight: 4,
+    padding: 6,
+    position: 'relative',
+  },
+  cartIcon: {
+    fontSize: 22,
+  },
+  cartBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.primary,
+    borderWidth: 1,
+    borderColor: colors.primaryBright,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  cartBadgeText: {
+    color: colors.text,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+});

@@ -54,6 +54,7 @@ export function serializeOwnerRestaurant(doc: InstanceType<typeof OwnerRestauran
     gstDocument: doc.gstDocument ?? null,
     panDocument: doc.panDocument ?? null,
     fssaiDocument: doc.fssaiDocument ?? null,
+    coverPhotoUrl: doc.coverPhotoUrl ?? null,
     bankDetails: doc.bankDetails,
     kycStatus: doc.kycStatus,
     approvalStatus: doc.approvalStatus,
@@ -196,6 +197,43 @@ export async function upsertMyRestaurant(
   }
 }
 
+export async function uploadCoverPhoto(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      next(createError(400, errors.array()[0].msg));
+      return;
+    }
+
+    const doc = await OwnerRestaurant.findOne({ ownerId: req.user!.sub });
+    if (!doc) {
+      next(createError(404, 'Save restaurant details before uploading a cover photo'));
+      return;
+    }
+    if (!['draft', 'rejected'].includes(doc.approvalStatus)) {
+      next(createError(409, 'Cover photo cannot be changed while under review'));
+      return;
+    }
+
+    const dataUrl = String((req.body as { dataUrl?: string }).dataUrl ?? '').trim();
+    const saved = await saveBase64Document(dataUrl, 'cover', 'restaurant');
+    doc.coverPhotoUrl = saved.url;
+    await doc.save();
+
+    if (doc.restaurantListingId) {
+      await Restaurant.findByIdAndUpdate(doc.restaurantListingId, { image: saved.url });
+    }
+
+    res.json({ registration: serializeOwnerRestaurant(doc) });
+  } catch (e) {
+    next(e instanceof Error ? createError(400, e.message) : e);
+  }
+}
+
 export async function uploadDocument(
   req: AuthedRequest,
   res: Response,
@@ -224,7 +262,7 @@ export async function uploadDocument(
       fileName?: string;
     };
 
-    const saved = saveBase64Document(dataUrl, type);
+    const saved = await saveBase64Document(dataUrl, type, 'shop-docs');
     const ref = {
       fileName: fileName?.trim() || saved.fileName,
       mimeType: saved.mimeType,
@@ -463,7 +501,7 @@ export async function approveRegistration(
     if (!listing) {
       listing = await Restaurant.create({
         name: doc.name,
-        image: '',
+        image: doc.coverPhotoUrl ?? '',
         cuisine: doc.cuisine,
         rating: 4.0,
         location: doc.location,
@@ -474,6 +512,7 @@ export async function approveRegistration(
       doc.restaurantListingId = listing._id;
     } else {
       listing.name = doc.name;
+      if (doc.coverPhotoUrl) listing.image = doc.coverPhotoUrl;
       listing.cuisine = doc.cuisine;
       listing.location = doc.location;
       listing.isActive = true;

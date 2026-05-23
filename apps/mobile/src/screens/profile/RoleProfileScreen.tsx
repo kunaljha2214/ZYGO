@@ -13,6 +13,9 @@ import { AppAlert } from '../../alert';
 import { useAuthStore } from '../../store/authStore';
 import { profileMenuForRole, roleDisplayName } from '../../config/profileMenu';
 import type { ProfileMenuItemId } from '../../config/profileMenu';
+import { fetchUserProfile, uploadUserProfilePhoto } from '../../api/userProfile';
+import { pickImageWithChoice } from '../../utils/pickImage';
+import { queryClient } from '../../queryClient';
 import { fetchDriverProfile } from '../../api/driver';
 import { fetchDeliveryProfile } from '../../api/deliveryPartner';
 import { fetchDriverEarningsDashboard } from '../../api/driver';
@@ -69,8 +72,15 @@ function vehicleLabel(type: string | undefined | null): string | null {
 export function RoleProfileScreen() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const patchUser = useAuthStore((s) => s.patchUser);
   const navigation = useNavigation<CustomerNav & DriverNav & DeliveryNav & ShopNav & AdminNav>();
   const role = user?.role;
+
+  const { data: userProfile } = useQuery({
+    queryKey: ['user-profile-header'],
+    queryFn: fetchUserProfile,
+    enabled: !!user,
+  });
 
   const { data: driverProfile } = useQuery({
     queryKey: ['driver-profile-menu'],
@@ -124,6 +134,19 @@ export function RoleProfileScreen() {
     },
     [navigation]
   );
+
+  const uploadProfilePhoto = useCallback(async () => {
+    const picked = await pickImageWithChoice();
+    if (!picked) return;
+    try {
+      const updated = await uploadUserProfilePhoto(picked.dataUrl);
+      await patchUser({ profilePhotoUrl: updated.profilePhotoUrl });
+      await queryClient.invalidateQueries({ queryKey: ['user-profile-header'] });
+      AppAlert.alert('Photo updated', 'Your profile picture has been saved.');
+    } catch (e) {
+      AppAlert.alert('Upload', e instanceof Error ? e.message : 'Could not upload photo');
+    }
+  }, [patchUser]);
 
   const openProfileDetails = useCallback(() => {
     if (role === 'customer') {
@@ -251,9 +274,11 @@ export function RoleProfileScreen() {
         phone={user.phone}
         roleLabel={roleDisplayName(role)}
         email={user.email}
+        profilePhotoUrl={userProfile?.profilePhotoUrl ?? user.profilePhotoUrl}
         rating={rating}
         vehicleLabel={role === 'driver' ? vehicleLabel(user.driverVehicleType) : null}
         onPressProfile={openProfileDetails}
+        onPressAvatar={() => void uploadProfilePhoto()}
         onPressRating={() => {
           if (role === 'driver') {
             (navigation as DriverNav).navigate('DriverEarnings');

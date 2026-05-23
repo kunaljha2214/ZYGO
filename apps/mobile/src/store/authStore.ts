@@ -19,6 +19,7 @@ export type AuthUser = {
   email?: string | null;
   emailVerified?: boolean;
   driverVehicleType?: 'bike' | 'auto' | 'car' | null;
+  profilePhotoUrl?: string | null;
 };
 
 type AuthState = {

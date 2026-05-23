@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Image } from 'react-native';
+import { resolveMediaUrl } from '../../utils/resolveMediaUrl';
 import { GlassCard } from '../neon/GlassCard';
 import { colors, radii } from '../../theme';
 
@@ -10,8 +11,10 @@ type Props = {
   email?: string | null;
   rating?: number | null;
   vehicleLabel?: string | null;
+  profilePhotoUrl?: string | null;
   onPressProfile?: () => void;
   onPressRating?: () => void;
+  onPressAvatar?: () => void;
 };
 
 function initials(name: string): string {
@@ -28,10 +31,13 @@ export function ProfileHeaderCard({
   email,
   rating,
   vehicleLabel,
+  profilePhotoUrl,
   onPressProfile,
   onPressRating,
+  onPressAvatar,
 }: Props) {
   const showRating = rating != null && Number.isFinite(rating);
+  const photoUri = resolveMediaUrl(profilePhotoUrl);
 
   return (
     <GlassCard glow style={styles.card} noPadding>
@@ -40,9 +46,17 @@ export function ProfileHeaderCard({
         disabled={!onPressProfile}
         style={({ pressed }) => [styles.top, pressed && styles.pressed]}
       >
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{initials(name)}</Text>
-        </View>
+        <Pressable
+          onPress={onPressAvatar}
+          disabled={!onPressAvatar}
+          style={styles.avatar}
+        >
+          {photoUri ? (
+            <Image source={{ uri: photoUri }} style={styles.avatarImage} resizeMode="cover" />
+          ) : (
+            <Text style={styles.avatarText}>{initials(name)}</Text>
+          )}
+        </Pressable>
         <View style={styles.identity}>
           <Text style={styles.name} numberOfLines={1}>
             {name}
@@ -106,6 +120,10 @@ const styles = StyleSheet.create({
     color: colors.primaryBright,
     fontWeight: '800',
     fontSize: 18,
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
   },
   identity: { flex: 1, minWidth: 0 },
   name: {

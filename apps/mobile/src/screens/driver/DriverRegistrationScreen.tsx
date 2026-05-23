@@ -4,8 +4,8 @@ import { Text, StyleSheet, Pressable, ActivityIndicator, TextInput } from 'react
 import { AppScreen } from '../../components/layout/AppScreen';
 import { AuthHeroCard } from '../../components/auth/AuthHeroCard';
 import { RegistrationLogoutButton } from '../../components/auth/RegistrationLogoutButton';
-import { DriverDocUploadRow } from '../../components/driver/DriverDocUploadRow';
-import { SAMPLE_DOC_DATA_URL } from '../../constants/restaurantRegistration';
+import { PhotoUploadRow } from '../../components/media/PhotoUploadRow';
+import { pickImageWithChoice } from '../../utils/pickImage';
 import {
   submitDriverForReview,
   updateDriverVehicle,
@@ -51,10 +51,13 @@ export function DriverRegistrationScreen({ initial, onSubmitted }: Props) {
   };
 
   const upload = async (type: string, label: string) => {
+    const picked = await pickImageWithChoice();
+    if (!picked) return;
     setBusy(true);
     try {
-      const p = await uploadDriverDocument(type, SAMPLE_DOC_DATA_URL, `${label}.png`);
+      const p = await uploadDriverDocument(type, picked.dataUrl, picked.fileName);
       setProfile(p);
+      AppAlert.alert('Uploaded', `${label} saved.`);
     } catch (e) {
       AppAlert.alert('Upload', e instanceof Error ? e.message : 'Failed');
     } finally {
@@ -118,12 +121,11 @@ export function DriverRegistrationScreen({ initial, onSubmitted }: Props) {
                 : d.type;
           const done = docs?.[key as keyof typeof docs];
           return (
-            <DriverDocUploadRow
+            <PhotoUploadRow
               key={d.type}
-              label={d.label}
-              done={!!done}
-              optional={d.optional}
-              disabled={busy}
+              label={d.label + (d.optional ? ' (optional)' : '')}
+              uploaded={!!done}
+              loading={busy}
               onPress={() => void upload(d.type, d.label)}
             />
           );

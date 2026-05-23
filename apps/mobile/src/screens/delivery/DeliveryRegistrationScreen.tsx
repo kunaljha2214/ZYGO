@@ -4,9 +4,9 @@ import { View, Text, StyleSheet, Pressable, ActivityIndicator} from 'react-nativ
 import { AppScreen } from '../../components/layout/AppScreen';
 import { AuthHeroCard } from '../../components/auth/AuthHeroCard';
 import { RegistrationLogoutButton } from '../../components/auth/RegistrationLogoutButton';
-import { SAMPLE_DOC_DATA_URL } from '../../constants/restaurantRegistration';
+import { PhotoUploadRow } from '../../components/media/PhotoUploadRow';
+import { pickImageWithChoice } from '../../utils/pickImage';
 import {
-  fetchDeliveryProfile,
   submitPartnerForReview,
   uploadPartnerDocument} from '../../api/deliveryPartner';
 import type { DeliveryPartnerProfile } from '../../types/deliveryPartner';
@@ -30,10 +30,13 @@ export function DeliveryRegistrationScreen({ initial, onSubmitted }: Props) {
   const [busy, setBusy] = useState(false);
 
   const upload = async (type: string, label: string) => {
+    const picked = await pickImageWithChoice();
+    if (!picked) return;
     setBusy(true);
     try {
-      const p = await uploadPartnerDocument(type, SAMPLE_DOC_DATA_URL, `${label}.png`);
+      const p = await uploadPartnerDocument(type, picked.dataUrl, picked.fileName);
       setProfile(p);
+      AppAlert.alert('Uploaded', `${label} saved.`);
     } catch (e) {
       AppAlert.alert('Upload', e instanceof Error ? e.message : 'Failed');
     } finally {
@@ -70,16 +73,13 @@ export function DeliveryRegistrationScreen({ initial, onSubmitted }: Props) {
                 : d.type;
           const done = docs?.[key as keyof typeof docs];
           return (
-            <Pressable
+            <PhotoUploadRow
               key={d.type}
-              style={styles.docBtn}
+              label={d.label}
+              uploaded={!!done}
+              loading={busy}
               onPress={() => void upload(d.type, d.label)}
-              disabled={busy}
-            >
-              <Text style={styles.docText}>
-                {d.label} {done ? '✓' : ''}
-              </Text>
-            </Pressable>
+            />
           );
         })}
         <Pressable style={styles.submit} onPress={() => void submit()} disabled={busy}>

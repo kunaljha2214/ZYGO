@@ -18,8 +18,11 @@ import { AppAlert } from '../../alert';
 import {
   fetchUserProfile,
   updateUserProfile,
+  uploadUserProfilePhoto,
   type UserProfileDetails,
 } from '../../api/userProfile';
+import { PhotoUploadRow } from '../../components/media/PhotoUploadRow';
+import { pickImageWithChoice } from '../../utils/pickImage';
 import { useAuthStore } from '../../store/authStore';
 import { colors } from '../../theme';
 import { parseBirthDateString } from '../../utils/dateOfBirth';
@@ -75,6 +78,22 @@ export function ProfileDetailsScreen() {
     if (!profile) return;
     setDobInitial(parseBirthDateString(profile.dateOfBirth));
     setDobPickerOpen(true);
+  }
+
+  async function uploadPhoto() {
+    const picked = await pickImageWithChoice();
+    if (!picked) return;
+    setSaving(true);
+    try {
+      const updated = await uploadUserProfilePhoto(picked.dataUrl);
+      setProfile(updated);
+      await patchUser({ profilePhotoUrl: updated.profilePhotoUrl });
+      AppAlert.alert('Photo updated', 'Your profile picture has been saved.');
+    } catch (e) {
+      AppAlert.alert('Upload', e instanceof Error ? e.message : 'Could not upload photo');
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function saveDob(apiValue: string) {
@@ -150,6 +169,16 @@ export function ProfileDetailsScreen() {
     <>
       <StackScroll>
         <GlassCard style={styles.card} noPadding>
+          <View style={styles.photoSection}>
+            <PhotoUploadRow
+              label="Profile photo"
+              hint="Visible on your profile for all roles"
+              previewUri={profile.profilePhotoUrl}
+              uploaded={!!profile.profilePhotoUrl}
+              loading={saving}
+              onPress={() => void uploadPhoto()}
+            />
+          </View>
           <ProfileDetailRow
             icon="👤"
             label="Name"
@@ -256,6 +285,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   card: { marginBottom: 12 },
+  photoSection: { paddingHorizontal: 4 },
   hint: {
     color: colors.textMuted,
     fontSize: 13,

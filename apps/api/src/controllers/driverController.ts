@@ -112,7 +112,7 @@ export async function uploadDocument(req: AuthedRequest, res: Response, next: Ne
     }
     const type = req.body.type as (typeof DOC_TYPES)[number];
     const profile = await getProfile(req.user!.sub);
-    const saved = saveBase64Document(req.body.dataUrl, type);
+    const saved = await saveBase64Document(req.body.dataUrl, type, 'driver-docs');
     const ref = {
       fileName: saved.fileName,
       mimeType: saved.mimeType,

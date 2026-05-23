@@ -170,6 +170,22 @@ Without a Mapbox token, geocoding falls back to **Nominatim** and map screens sh
 - **Rides:** public `POST /rides/estimate`, `POST /rides` (auth), fare from distance + duration; captains seeded with `isCaptainAvailable: true`.
 - **Mobile:** React Navigation (tabs + stacks), TanStack Query, Zustand (`auth`, `cart`, `service` preference).
 
+## Image uploads (Cloudinary)
+
+Profile photos, partner KYC documents, restaurant/menu photos upload from the app via **camera or gallery** and are stored on **Cloudinary** when configured.
+
+Add to `apps/api/.env` (from [Cloudinary Console](https://cloudinary.com/console)):
+
+```env
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
+```
+
+Without these keys, the API falls back to local `apps/api/uploads/` (fine for dev; **not** persistent on Render).
+
+After changing API env on Render, redeploy the API. Rebuild the mobile app after adding `react-native-image-picker` (new native module).
+
 ## Out of scope (MVP)
 
 Payments, OTP, real-time captain tracking, restaurant/captain apps, admin UI.

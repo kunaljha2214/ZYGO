@@ -9,6 +9,7 @@ import {
   parseDateOfBirthInput,
   validateDateOfBirth,
 } from '../utils/profileFormat';
+import { saveBase64Document } from '../utils/uploads';
 
 function normalizePhone10(raw: string): string {
   const digits = raw.replace(/\D/g, '');
@@ -37,8 +38,43 @@ export function serializeUserProfile(doc: InstanceType<typeof User>) {
           phone: doc.emergencyContact.phone,
         }
       : null,
+    profilePhotoUrl: doc.profilePhotoUrl ?? null,
     createdAt: createdAt.toISOString(),
   };
+}
+
+export async function uploadProfilePhoto(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (!req.user) {
+      next(createError(401));
+      return;
+    }
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      next(createError(400, errors.array()[0].msg));
+      return;
+    }
+    const dataUrl = String((req.body as { dataUrl?: string }).dataUrl ?? '').trim();
+    if (!dataUrl) {
+      next(createError(400, 'Image data required'));
+      return;
+    }
+    const user = await User.findById(req.user.sub);
+    if (!user) {
+      next(createError(404));
+      return;
+    }
+    const saved = await saveBase64Document(dataUrl, 'profile', 'profile');
+    user.profilePhotoUrl = saved.url;
+    await user.save();
+    res.json(serializeUserProfile(user));
+  } catch (e) {
+    next(e instanceof Error ? createError(400, e.message) : e);
+  }
 }
 
 export async function listAddresses(

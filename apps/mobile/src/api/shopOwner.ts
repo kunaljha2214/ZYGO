@@ -31,6 +31,14 @@ export async function uploadRestaurantDocument(
   return data.registration;
 }
 
+export async function uploadRestaurantCoverPhoto(dataUrl: string) {
+  const { data } = await api.post<{ registration: OwnerRestaurantRegistration }>(
+    '/shop/restaurant/cover-photo',
+    { dataUrl }
+  );
+  return data.registration;
+}
+
 export async function submitRestaurantRegistration() {
   const { data } = await api.post<{ registration: OwnerRestaurantRegistration }>(
     '/shop/restaurant/submit'

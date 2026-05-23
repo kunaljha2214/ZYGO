@@ -18,7 +18,9 @@ import type { MenuStackParamList } from '../../navigation/types';
 import { StackScroll } from '../../components/layout/StackScroll';
 import type { MenuAddOn, MenuItemPayload, MenuVariant, SpicyLevel } from '../../types/menu';
 import { colors, radii, placeholderColor } from '../../theme';
-import { SAMPLE_DOC_DATA_URL } from '../../constants/restaurantRegistration';
+import { PhotoUploadRow } from '../../components/media/PhotoUploadRow';
+import { pickImageWithChoice } from '../../utils/pickImage';
+import { resolveMediaUrl } from '../../utils/resolveMediaUrl';
 
 type Props = NativeStackScreenProps<MenuStackParamList, 'EditMenuItem'>;
 
@@ -49,7 +51,8 @@ export function EditMenuItemScreen({ navigation, route }: Props) {
   const [availableUntil, setAvailableUntil] = useState('');
   const [autoDisableHours, setAutoDisableHours] = useState('');
   const [isAvailable, setIsAvailable] = useState(true);
-  const [hasImage, setHasImage] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -73,7 +76,7 @@ export function EditMenuItemScreen({ navigation, route }: Props) {
             setAvailableFrom(item.availableFrom ?? '');
             setAvailableUntil(item.availableUntil ?? '');
             setIsAvailable(item.isAvailable);
-            setHasImage(!!item.imageUrl);
+            setImagePreview(resolveMediaUrl(item.imageUrl));
           }
         } else if (data.categories[0]) {
           setCategoryId(data.categories[0].id);
@@ -107,7 +110,14 @@ export function EditMenuItemScreen({ navigation, route }: Props) {
       availableUntil: availableUntil.trim() || null,
       autoDisableAt,
       isAvailable,
-      imageDataUrl: !itemId && !hasImage ? SAMPLE_DOC_DATA_URL : undefined};
+      imageDataUrl: imageDataUrl ?? undefined};
+  }
+
+  async function pickItemPhoto() {
+    const picked = await pickImageWithChoice();
+    if (!picked) return;
+    setImageDataUrl(picked.dataUrl);
+    setImagePreview(picked.uri);
   }
 
   async function onSave() {
@@ -124,12 +134,16 @@ export function EditMenuItemScreen({ navigation, route }: Props) {
       AppAlert.alert('Category required', 'Create a category first from the Categories tab.');
       return;
     }
+    if (!itemId && !imageDataUrl) {
+      AppAlert.alert('Photo required', 'Add a photo for this menu item.');
+      return;
+    }
     setSaving(true);
     try {
       if (itemId) {
         await updateMenuItem(itemId, payload);
       } else {
-        await createMenuItem({ ...payload, imageDataUrl: SAMPLE_DOC_DATA_URL });
+        await createMenuItem({ ...payload, imageDataUrl: imageDataUrl! });
       }
       navigation.goBack();
     } catch (e) {
@@ -322,11 +336,14 @@ export function EditMenuItemScreen({ navigation, route }: Props) {
         />
       </AuthField>
 
-      {!itemId ? (
-        <Pressable style={styles.miniBtn} onPress={() => setHasImage(true)}>
-          <Text style={styles.miniBtnText}>{hasImage ? '✓ Photo placeholder attached' : '+ Attach placeholder photo'}</Text>
-        </Pressable>
-      ) : null}
+      <PhotoUploadRow
+        label="Item photo"
+        hint={itemId ? 'Optional — replaces current photo' : 'Required for new items'}
+        previewUri={imagePreview}
+        uploaded={!!imagePreview}
+        loading={saving}
+        onPress={() => void pickItemPhoto()}
+      />
 
       <Pressable style={[styles.saveBtn, saving && styles.disabled]} onPress={onSave} disabled={saving}>
         {saving ? (

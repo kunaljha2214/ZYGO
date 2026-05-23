@@ -235,7 +235,7 @@ export async function createMenuItemFull(
 
     let imageUrl = parsed.imageUrl;
     if (parsed.imageDataUrl) {
-      const saved = saveBase64Document(parsed.imageDataUrl, 'menu-item');
+      const saved = await saveBase64Document(parsed.imageDataUrl, 'menu-item', 'menu');
       imageUrl = saved.url;
     }
 
@@ -290,7 +290,7 @@ export async function updateMenuItemFull(
     );
     item.description = parsed.description;
     if (parsed.imageDataUrl) {
-      const saved = saveBase64Document(parsed.imageDataUrl, 'menu-item');
+      const saved = await saveBase64Document(parsed.imageDataUrl, 'menu-item', 'menu');
       item.imageUrl = saved.url;
     } else if (parsed.imageUrl) {
       item.imageUrl = parsed.imageUrl;

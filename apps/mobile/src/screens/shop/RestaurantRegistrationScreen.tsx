@@ -21,11 +21,13 @@ import {
   CUISINE_OPTIONS,
   DAY_LABELS,
   DEFAULT_MAP,
-  SAMPLE_DOC_DATA_URL,
   defaultOpeningHours} from '../../constants/restaurantRegistration';
+import { PhotoUploadRow } from '../../components/media/PhotoUploadRow';
+import { pickImageWithChoice } from '../../utils/pickImage';
 import {
   saveRestaurantRegistration,
   submitRestaurantRegistration,
+  uploadRestaurantCoverPhoto,
   uploadRestaurantDocument} from '../../api/shopOwner';
 import type {
   FoodServiceType,
@@ -63,6 +65,10 @@ export function RestaurantRegistrationScreen({ initial, onSubmitted }: Props) {
   const [gstDoc, setGstDoc] = useState(!!initial?.gstDocument);
   const [panDoc, setPanDoc] = useState(!!initial?.panDocument);
   const [fssaiDoc, setFssaiDoc] = useState(!!initial?.fssaiDocument);
+  const [coverPhotoUrl, setCoverPhotoUrl] = useState<string | null>(initial?.coverPhotoUrl ?? null);
+  const [gstPreview, setGstPreview] = useState<string | null>(initial?.gstDocument?.url ?? null);
+  const [panPreview, setPanPreview] = useState<string | null>(initial?.panDocument?.url ?? null);
+  const [fssaiPreview, setFssaiPreview] = useState<string | null>(initial?.fssaiDocument?.url ?? null);
 
   const [accountHolderName, setAccountHolderName] = useState(
     initial?.bankDetails?.accountHolderName ?? ''
@@ -133,16 +139,44 @@ export function RestaurantRegistrationScreen({ initial, onSubmitted }: Props) {
     );
   }
 
-  async function uploadDoc(type: 'gst' | 'pan' | 'fssai', label: string) {
+  async function uploadCover() {
+    const picked = await pickImageWithChoice();
+    if (!picked) return;
     setSaving(true);
     setErr(null);
     try {
       await saveRestaurantRegistration(payload);
-      await uploadRestaurantDocument(type, SAMPLE_DOC_DATA_URL, `${label}-document.png`);
-      if (type === 'gst') setGstDoc(true);
-      if (type === 'pan') setPanDoc(true);
-      if (type === 'fssai') setFssaiDoc(true);
-      AppAlert.alert('Uploaded', `${label} document saved. Replace with a real scan before production.`);
+      const reg = await uploadRestaurantCoverPhoto(picked.dataUrl);
+      setCoverPhotoUrl(reg.coverPhotoUrl);
+      AppAlert.alert('Uploaded', 'Restaurant photo saved.');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Upload failed');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function uploadDoc(type: 'gst' | 'pan' | 'fssai', label: string) {
+    const picked = await pickImageWithChoice();
+    if (!picked) return;
+    setSaving(true);
+    setErr(null);
+    try {
+      await saveRestaurantRegistration(payload);
+      const reg = await uploadRestaurantDocument(type, picked.dataUrl, picked.fileName);
+      if (type === 'gst') {
+        setGstDoc(true);
+        setGstPreview(reg.gstDocument?.url ?? null);
+      }
+      if (type === 'pan') {
+        setPanDoc(true);
+        setPanPreview(reg.panDocument?.url ?? null);
+      }
+      if (type === 'fssai') {
+        setFssaiDoc(true);
+        setFssaiPreview(reg.fssaiDocument?.url ?? null);
+      }
+      AppAlert.alert('Uploaded', `${label} document saved.`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Upload failed');
     } finally {
@@ -232,6 +266,14 @@ export function RestaurantRegistrationScreen({ initial, onSubmitted }: Props) {
             <AuthField label="Restaurant name" large>
               <AppTextInput style={styles.input} value={name} onChangeText={setName} placeholder="e.g. Spice Route Kitchen" />
             </AuthField>
+            <PhotoUploadRow
+              label="Restaurant photo"
+              hint="Shown on your listing after approval"
+              previewUri={coverPhotoUrl}
+              uploaded={!!coverPhotoUrl}
+              loading={saving}
+              onPress={() => void uploadCover()}
+            />
             <Text style={styles.sectionLabel}>Cuisine type</Text>
             <View style={styles.chips}>
               {CUISINE_OPTIONS.map((c) => (
@@ -321,16 +363,36 @@ export function RestaurantRegistrationScreen({ initial, onSubmitted }: Props) {
             <AuthField label="GST number" large>
               <AppTextInput style={styles.input} value={gstNumber} onChangeText={setGstNumber} autoCapitalize="characters" />
             </AuthField>
-            <DocRow label="GST certificate" uploaded={gstDoc} onUpload={() => uploadDoc('gst', 'GST')} loading={saving} />
+            <PhotoUploadRow
+              label="GST certificate"
+              hint="Photo of GST certificate"
+              previewUri={gstPreview}
+              uploaded={gstDoc}
+              loading={saving}
+              onPress={() => void uploadDoc('gst', 'GST')}
+            />
             <AuthField label="PAN number" large>
               <AppTextInput style={styles.input} value={panNumber} onChangeText={setPanNumber} autoCapitalize="characters" />
             </AuthField>
-            <DocRow label="PAN card" uploaded={panDoc} onUpload={() => uploadDoc('pan', 'PAN')} loading={saving} />
+            <PhotoUploadRow
+              label="PAN card"
+              hint="Photo of PAN card"
+              previewUri={panPreview}
+              uploaded={panDoc}
+              loading={saving}
+              onPress={() => void uploadDoc('pan', 'PAN')}
+            />
             <AuthField label="FSSAI license number" large>
               <AppTextInput style={styles.input} value={fssaiNumber} onChangeText={setFssaiNumber} />
             </AuthField>
-            <DocRow label="FSSAI license" uploaded={fssaiDoc} onUpload={() => uploadDoc('fssai', 'FSSAI')} loading={saving} />
-            <Text style={styles.hint}>Document upload uses a placeholder file for now. Wire a camera/gallery picker before production.</Text>
+            <PhotoUploadRow
+              label="FSSAI license"
+              hint="Photo of FSSAI license"
+              previewUri={fssaiPreview}
+              uploaded={fssaiDoc}
+              loading={saving}
+              onPress={() => void uploadDoc('fssai', 'FSSAI')}
+            />
           </>
         );
       case 3:
@@ -451,30 +513,6 @@ export function RestaurantRegistrationScreen({ initial, onSubmitted }: Props) {
         )}
       </View>
     </AppScreen>
-  );
-}
-
-function DocRow({
-  label,
-  uploaded,
-  onUpload,
-  loading}: {
-  label: string;
-  uploaded: boolean;
-  onUpload: () => void;
-  loading: boolean;
-}) {
-  return (
-    <View style={styles.docRow}>
-      <Text style={styles.docLabel}>{label}</Text>
-      {uploaded ? (
-        <Text style={styles.docOk}>✓ Uploaded</Text>
-      ) : (
-        <Pressable style={styles.docBtn} onPress={onUpload} disabled={loading}>
-          <Text style={styles.docBtnText}>Upload document</Text>
-        </Pressable>
-      )}
-    </View>
   );
 }
 

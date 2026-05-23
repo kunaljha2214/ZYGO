@@ -332,6 +332,7 @@ export function sanitizeUser(doc: InstanceType<typeof User>) {
     name: doc.name,
     role: doc.role,
     driverVehicleType: doc.driverVehicleType ?? undefined,
+    profilePhotoUrl: doc.profilePhotoUrl ?? null,
     savedAddresses: doc.savedAddresses,
   };
 }

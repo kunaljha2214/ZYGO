@@ -51,6 +51,7 @@ export interface IOwnerRestaurant extends Document {
   gstDocument?: IDocumentRef | null;
   panDocument?: IDocumentRef | null;
   fssaiDocument?: IDocumentRef | null;
+  coverPhotoUrl?: string | null;
   bankDetails: IBankDetails;
   kycStatus: KycStatus;
   approvalStatus: ApprovalStatus;
@@ -130,6 +131,7 @@ const OwnerRestaurantSchema = new Schema<IOwnerRestaurant>(
     gstDocument: { type: DocumentSchema, default: null },
     panDocument: { type: DocumentSchema, default: null },
     fssaiDocument: { type: DocumentSchema, default: null },
+    coverPhotoUrl: { type: String, default: null },
     bankDetails: { type: BankSchema, default: () => ({}) },
     kycStatus: {
       type: String,

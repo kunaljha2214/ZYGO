@@ -60,6 +60,7 @@ export interface IUser extends Document {
   /** Set true after date of birth is saved — cannot be changed again. */
   dateOfBirthLocked?: boolean;
   emergencyContact?: IEmergencyContact | null;
+  profilePhotoUrl?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -141,6 +142,7 @@ const UserSchema = new Schema<IUser>(
     dateOfBirth: { type: Date, default: null },
     dateOfBirthLocked: { type: Boolean, default: false },
     emergencyContact: { type: EmergencyContactSchema, default: null },
+    profilePhotoUrl: { type: String, default: null },
   },
   { timestamps: true }
 );

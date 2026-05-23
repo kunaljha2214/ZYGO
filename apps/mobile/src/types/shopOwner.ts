@@ -48,6 +48,7 @@ export type OwnerRestaurantRegistration = {
   gstDocument: DocumentRef | null;
   panDocument: DocumentRef | null;
   fssaiDocument: DocumentRef | null;
+  coverPhotoUrl: string | null;
   bankDetails: BankDetails;
   kycStatus: KycStatus;
   approvalStatus: ApprovalStatus;

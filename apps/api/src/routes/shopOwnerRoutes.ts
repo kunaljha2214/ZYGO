@@ -30,6 +30,13 @@ r.get('/restaurant/mine', shopOnly, wrap(shop.getMyRestaurant));
 r.put('/restaurant', shopOnly, wrap(shop.upsertMyRestaurant));
 
 r.post(
+  '/restaurant/cover-photo',
+  shopOnly,
+  [body('dataUrl').trim().notEmpty().withMessage('Image data required')],
+  wrap(shop.uploadCoverPhoto)
+);
+
+r.post(
   '/restaurant/documents',
   shopOnly,
   [
