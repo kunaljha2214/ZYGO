@@ -109,6 +109,7 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
+    overflow: 'hidden',
     backgroundColor: colors.primarySoft,
     borderWidth: 2,
     borderColor: colors.primary,
@@ -122,8 +123,9 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   avatarImage: {
-    width: '100%',
-    height: '100%',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
   },
   identity: { flex: 1, minWidth: 0 },
   name: {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useCartStore } from '../../store/cartStore';
 import { lineKeyForCartLine } from '../../store/cartLineKey';
 import type { MenuAddOn, MenuVariant } from '../../types/menu';
@@ -73,36 +73,10 @@ export function MenuItemCartControls({
     };
 
     return (
-      <View style={shared.qtyRow}>
-        <Pressable
-          onPress={() => adjustQty(-1)}
-          style={shared.qtyBtn}
-          accessibilityLabel="Decrease quantity"
-        >
-          <Text style={shared.qtyTxt}>−</Text>
-        </Pressable>
-        <Text style={shared.qtyNum}>{quantity}</Text>
-        <Pressable
-          onPress={() => adjustQty(1)}
-          style={shared.qtyBtn}
-          accessibilityLabel="Increase quantity"
-        >
-          <Text style={shared.qtyTxt}>+</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
-  if (quantity > 0 && needsCustomize) {
-    return (
-      <>
+      <View style={styles.wrap}>
         <View style={shared.qtyRow}>
           <Pressable
-            onPress={() => {
-              const items = useCartStore.getState().items.filter((i) => i.menuItemId === menuItemId);
-              const last = items[items.length - 1];
-              if (last) setQty(lineKeyForCartLine(last), last.quantity - 1);
-            }}
+            onPress={() => adjustQty(-1)}
             style={shared.qtyBtn}
             accessibilityLabel="Decrease quantity"
           >
@@ -110,12 +84,42 @@ export function MenuItemCartControls({
           </Pressable>
           <Text style={shared.qtyNum}>{quantity}</Text>
           <Pressable
-            onPress={openCustomize}
+            onPress={() => adjustQty(1)}
             style={shared.qtyBtn}
-            accessibilityLabel="Add another"
+            accessibilityLabel="Increase quantity"
           >
             <Text style={shared.qtyTxt}>+</Text>
           </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  if (quantity > 0 && needsCustomize) {
+    return (
+      <>
+        <View style={styles.wrap}>
+          <View style={shared.qtyRow}>
+            <Pressable
+              onPress={() => {
+                const items = useCartStore.getState().items.filter((i) => i.menuItemId === menuItemId);
+                const last = items[items.length - 1];
+                if (last) setQty(lineKeyForCartLine(last), last.quantity - 1);
+              }}
+              style={shared.qtyBtn}
+              accessibilityLabel="Decrease quantity"
+            >
+              <Text style={shared.qtyTxt}>−</Text>
+            </Pressable>
+            <Text style={shared.qtyNum}>{quantity}</Text>
+            <Pressable
+              onPress={openCustomize}
+              style={shared.qtyBtn}
+              accessibilityLabel="Add another"
+            >
+              <Text style={shared.qtyTxt}>+</Text>
+            </Pressable>
+          </View>
         </View>
         <MenuItemCustomizeModal
           visible={customizeOpen}
@@ -139,19 +143,21 @@ export function MenuItemCartControls({
 
   return (
     <>
-      <Pressable
-        style={shared.addBtn}
-        onPress={() => {
-          if (needsCustomize) {
-            openCustomize();
-            return;
-          }
-          addLine({ name, price });
-        }}
-        accessibilityLabel={`Add ${name}`}
-      >
-        <Text style={shared.addBtnText}>Add</Text>
-      </Pressable>
+      <View style={styles.wrap}>
+        <Pressable
+          style={shared.addBtn}
+          onPress={() => {
+            if (needsCustomize) {
+              openCustomize();
+              return;
+            }
+            addLine({ name, price });
+          }}
+          accessibilityLabel={`Add ${name}`}
+        >
+          <Text style={shared.addBtnText}>ADD</Text>
+        </Pressable>
+      </View>
       {needsCustomize ? (
         <MenuItemCustomizeModal
           visible={customizeOpen}
@@ -173,3 +179,10 @@ export function MenuItemCartControls({
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  wrap: {
+    flexShrink: 0,
+    alignSelf: 'center',
+  },
+});

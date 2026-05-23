@@ -9,17 +9,16 @@ export function AlertHost() {
   if (!current) return null;
 
   const onButtonPress = (button: AlertButton) => {
-    dismiss();
     button.onPress?.();
+    dismiss();
   };
 
   return (
     <AlertMessageCard
       alert={current}
       onDismiss={() => {
-        const cancel = current.buttons.find((b) => b.style === 'cancel');
+        current.onBackdrop?.();
         dismiss();
-        cancel?.onPress?.();
       }}
       onButtonPress={onButtonPress}
     />

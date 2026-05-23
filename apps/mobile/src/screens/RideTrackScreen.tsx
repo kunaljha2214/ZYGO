@@ -15,6 +15,8 @@ import {
   offDriverLocation,
   onDriverLocation,
 } from '../services/rideSocket';
+import { TripContactCard } from '../components/trip/TripContactCard';
+import { callRideCaptain } from '../utils/placePeerCall';
 import { shared } from '../theme/styles';
 import { colors } from '../theme';
 
@@ -29,7 +31,16 @@ type Ride = {
   durationMin?: number;
   status: string;
   driverLastLocation?: { lat: number; lng: number } | null;
+  captain?: { id: string; name: string } | null;
 };
+
+const CAPTAIN_CONTACT_STATUSES = new Set([
+  'assigned',
+  'arriving',
+  'arrived',
+  'in_progress',
+  'completed',
+]);
 
 type R = RouteProp<HomeStackParamList, 'RideTrack'> | RouteProp<OrdersStackParamList, 'RideDetail'>;
 
@@ -147,6 +158,14 @@ export function RideTrackScreen() {
           />
         )}
       </View>
+
+      {data.captain && CAPTAIN_CONTACT_STATUSES.has(data.status) ? (
+        <TripContactCard
+          title="Your captain"
+          name={data.captain.name}
+          onCall={() => callRideCaptain(rideId)}
+        />
+      ) : null}
 
       <Card glow style={shared.block}>
         <Text style={shared.h}>Pickup</Text>

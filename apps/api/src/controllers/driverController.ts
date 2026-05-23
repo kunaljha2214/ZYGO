@@ -15,6 +15,10 @@ import {
 import { syncDriverBusyState } from '../services/driverAvailability';
 import { saveBase64Document } from '../utils/uploads';
 import { emitToUser } from '../socket/io';
+import {
+  getCustomerContactForCaptain,
+  getCustomerDisplayName,
+} from '../services/ridePeerContact';
 
 const DOC_TYPES = ['aadhaar', 'pan', 'driving_license', 'rc', 'insurance', 'selfie'] as const;
 
@@ -264,7 +268,9 @@ export async function acceptRequest(req: AuthedRequest, res: Response, next: Nex
       return;
     }
     const ride = await RideBooking.findById(req.params.rideId).lean();
-    res.json({ ride: formatDriverRide(ride!) });
+    res.json({
+      ride: await formatDriverRide(ride! as unknown as Record<string, unknown>),
+    });
   } catch (e) {
     next(e);
   }
@@ -338,13 +344,29 @@ export async function advanceRideStatus(req: AuthedRequest, res: Response, next:
     };
     emitToUser(ride.userId.toString(), 'ride:status', payload);
 
-    res.json({ ride: formatDriverRide(ride.toObject() as unknown as Record<string, unknown>) });
+    res.json({
+      ride: await formatDriverRide(ride.toObject() as unknown as Record<string, unknown>),
+    });
   } catch (e) {
     next(e);
   }
 }
 
-function formatDriverRide(r: Record<string, unknown>) {
+export async function getRideCustomerContact(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const contact = await getCustomerContactForCaptain(req.params.rideId, req.user!.sub);
+    res.json(contact);
+  } catch (e) {
+    next(e);
+  }
+}
+
+async function formatDriverRide(r: Record<string, unknown>) {
+  const customer = await getCustomerDisplayName(r.userId as string);
   return {
     id: String(r._id),
     pickup: r.pickup,
@@ -360,6 +382,7 @@ function formatDriverRide(r: Record<string, unknown>) {
     status: r.status,
     estimatedDriverEarnings: r.estimatedDriverEarnings,
     createdAt: r.createdAt,
+    customer,
   };
 }
 
@@ -388,7 +411,9 @@ export async function getActiveRide(req: AuthedRequest, res: Response, next: Nex
       res.json({ ride: null });
       return;
     }
-    res.json({ ride: formatDriverRide(ride.toObject() as unknown as Record<string, unknown>) });
+    res.json({
+      ride: await formatDriverRide(ride.toObject() as unknown as Record<string, unknown>),
+    });
   } catch (e) {
     next(e);
   }

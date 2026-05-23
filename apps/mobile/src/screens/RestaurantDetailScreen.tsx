@@ -3,28 +3,16 @@ import { View, Text, FlatList, Pressable, ActivityIndicator, StyleSheet } from '
 import { useQuery } from '@tanstack/react-query';
 import type { HomeStackProps } from '../navigation/types';
 import { api } from '../api/client';
-import { Card } from '../components/Card';
-import { MenuItemCartControls } from '../components/food/MenuItemCartControls';
+import { MenuItemCard, type MenuItemCardData } from '../components/food/MenuItemCard';
 import { useCartStore } from '../store/cartStore';
-import type { MenuAddOn, MenuVariant } from '../types/menu';
 import { colors } from '../theme';
 import { shared } from '../theme/styles';
 import { useAppInsets } from '../hooks/useAppInsets';
 
-type MenuItem = {
-  id: string;
-  name: string;
-  price: number;
-  category: string;
-  isVeg: boolean;
-  variants?: MenuVariant[];
-  addOns?: MenuAddOn[];
-};
-
 type RestDetail = {
   id: string;
   name: string;
-  menu: MenuItem[];
+  menu: MenuItemCardData[];
 };
 
 type Props = HomeStackProps<'RestaurantDetail'>;
@@ -44,7 +32,8 @@ export function RestaurantDetailScreen({ navigation, route }: Props) {
     queryFn: async () => {
       const { data: r } = await api.get<RestDetail>(`/restaurants/${id}`);
       return r;
-    }});
+    },
+  });
 
   useLayoutEffect(() => {
     const screenTitle = title ?? data?.name ?? 'Menu';
@@ -72,7 +61,7 @@ export function RestaurantDetailScreen({ navigation, route }: Props) {
             )
           : undefined,
     });
-  }, [navigation, title, data?.name, id, cartCount, setRestaurant]);
+  }, [navigation, title, data?.name, id, cartCount, setRestaurant, data?.name]);
 
   if (isLoading) {
     return (
@@ -97,26 +86,7 @@ export function RestaurantDetailScreen({ navigation, route }: Props) {
       keyExtractor={(item) => item.id}
       extraData={cartItems}
       renderItem={({ item }) => (
-        <Card>
-          <View style={shared.row}>
-            <View style={{ flex: 1 }}>
-              <Text style={shared.itemName}>{item.name}</Text>
-              <Text style={shared.itemMeta}>
-                {item.isVeg ? '🟢' : '🔴'} {item.category}
-              </Text>
-              <Text style={shared.price}>₹{item.price}</Text>
-            </View>
-            <MenuItemCartControls
-              menuItemId={item.id}
-              name={item.name}
-              price={item.price}
-              restaurantId={data.id}
-              restaurantName={data.name}
-              variants={item.variants ?? []}
-              addOns={item.addOns ?? []}
-            />
-          </View>
-        </Card>
+        <MenuItemCard item={item} restaurantId={data.id} restaurantName={data.name} />
       )}
     />
   );

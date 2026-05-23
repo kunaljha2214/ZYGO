@@ -117,7 +117,7 @@ export function EditMenuItemScreen({ navigation, route }: Props) {
     const picked = await pickImageWithChoice();
     if (!picked) return;
     setImageDataUrl(picked.dataUrl);
-    setImagePreview(picked.uri);
+    setImagePreview(picked.uri || picked.dataUrl);
   }
 
   async function onSave() {
@@ -141,9 +141,15 @@ export function EditMenuItemScreen({ navigation, route }: Props) {
     setSaving(true);
     try {
       if (itemId) {
-        await updateMenuItem(itemId, payload);
+        const item = await updateMenuItem(itemId, payload);
+        if (item.imageUrl) {
+          setImagePreview(resolveMediaUrl(item.imageUrl));
+        }
       } else {
-        await createMenuItem({ ...payload, imageDataUrl: imageDataUrl! });
+        const item = await createMenuItem({ ...payload, imageDataUrl: imageDataUrl! });
+        if (item.imageUrl) {
+          setImagePreview(resolveMediaUrl(item.imageUrl));
+        }
       }
       navigation.goBack();
     } catch (e) {
@@ -340,7 +346,7 @@ export function EditMenuItemScreen({ navigation, route }: Props) {
         label="Item photo"
         hint={itemId ? 'Optional — replaces current photo' : 'Required for new items'}
         previewUri={imagePreview}
-        uploaded={!!imagePreview}
+        uploaded={!!(imagePreview || imageDataUrl)}
         loading={saving}
         onPress={() => void pickItemPhoto()}
       />

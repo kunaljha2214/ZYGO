@@ -8,6 +8,10 @@ import { fetchMapboxDrivingRoute } from '../services/mapboxDirections';
 import { getVehicleType } from '../config/app';
 import { startRideDispatch, clearRideDispatch } from '../services/rideAssignmentEngine';
 import { syncDriverBusyState } from '../services/driverAvailability';
+import {
+  getCaptainContactForCustomer,
+  getCaptainDisplayName,
+} from '../services/ridePeerContact';
 
 export async function estimateRide(
   req: AuthedRequest,
@@ -142,7 +146,28 @@ export async function getRide(
       next(createError(404));
       return;
     }
-    res.json(formatRideLean(ride as Record<string, unknown>));
+    const captain = await getCaptainDisplayName(ride.captainId);
+    res.json({
+      ...formatRideLean(ride as Record<string, unknown>),
+      captain,
+    });
+  } catch (e) {
+    next(e);
+  }
+}
+
+export async function getRideContact(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (!req.user) {
+      next(createError(401));
+      return;
+    }
+    const contact = await getCaptainContactForCustomer(req.params.id, req.user.sub);
+    res.json(contact);
   } catch (e) {
     next(e);
   }

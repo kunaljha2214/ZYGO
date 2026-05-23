@@ -76,13 +76,53 @@ export async function pickImageFromGallery(): Promise<PickedImage | null> {
   return assetToPicked(result.assets[0]);
 }
 
-/** Prompt to choose camera or gallery, then return base64 data URL for upload APIs. */
+/** Wait for the styled alert to close before opening camera/gallery. */
+function openPickerAfterUiSettled(run: () => Promise<PickedImage | null>): Promise<PickedImage | null> {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      void run().then(resolve);
+    }, 500);
+  });
+}
+
+/**
+ * Camera vs gallery chooser — same purple AppAlert as profile upload.
+ */
 export function pickImageWithChoice(): Promise<PickedImage | null> {
   return new Promise((resolve) => {
-    AppAlert.alert('Upload photo', 'Take a new photo or choose from gallery', [
-      { text: 'Camera', onPress: () => void pickImageFromCamera().then(resolve) },
-      { text: 'Gallery', onPress: () => void pickImageFromGallery().then(resolve) },
-      { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
-    ]);
+    let settled = false;
+    let launchingPicker = false;
+
+    const finish = (value: PickedImage | null) => {
+      if (settled) return;
+      settled = true;
+      launchingPicker = false;
+      resolve(value);
+    };
+
+    const startCamera = () => {
+      launchingPicker = true;
+      void openPickerAfterUiSettled(pickImageFromCamera).then(finish);
+    };
+
+    const startGallery = () => {
+      launchingPicker = true;
+      void openPickerAfterUiSettled(pickImageFromGallery).then(finish);
+    };
+
+    AppAlert.alert(
+      'Upload photo',
+      'Take a new photo or choose one from your gallery',
+      [
+        { text: 'Take photo', onPress: startCamera },
+        { text: 'Choose from gallery', onPress: startGallery },
+        { text: 'Cancel', style: 'cancel', onPress: () => finish(null) },
+      ],
+      {
+        onBackdrop: () => {
+          if (!launchingPicker) finish(null);
+        },
+      }
+    );
   });
 }

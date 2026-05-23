@@ -11,6 +11,8 @@ import Geolocation from '@react-native-community/geolocation';
 import { colors, radii, spacing } from '../../theme';
 import { formatInr } from '../../utils/formatMoney';
 import { drivingDirectionsUrl } from '../../utils/navigationUrl';
+import { TripContactCard } from '../../components/trip/TripContactCard';
+import { callRideCustomer } from '../../utils/placePeerCall';
 
 const STATUS_LABELS: Record<string, string> = {
   assigned: 'Accepted — head to pickup',
@@ -94,6 +96,14 @@ export function DriverTripActiveView({ ride, onRideUpdated }: Props) {
       </View>
 
       <TripStatusPills status={current.status} />
+
+      {current.customer ? (
+        <TripContactCard
+          title="Customer"
+          name={current.customer.name}
+          onCall={() => callRideCustomer(current.id)}
+        />
+      ) : null}
 
       <GlassCard glow style={styles.card}>
         <Text style={styles.cardLabel}>Pickup</Text>

@@ -10,18 +10,24 @@ export type AlertButton = {
 
 export type AlertVariant = 'info' | 'success' | 'error' | 'warning';
 
+export type AlertOptions = {
+  /** Fired when the user taps outside the card or presses Android back. */
+  onBackdrop?: () => void;
+};
+
 export type AlertPayload = {
   id: string;
   title: string;
   message?: string;
   buttons: AlertButton[];
   variant: AlertVariant;
+  onBackdrop?: () => void;
 };
 
 type AlertState = {
   current: AlertPayload | null;
   queue: AlertPayload[];
-  show: (title: string, message?: string, buttons?: AlertButton[]) => void;
+  show: (title: string, message?: string, buttons?: AlertButton[], options?: AlertOptions) => void;
   dismiss: () => void;
 };
 
@@ -48,13 +54,14 @@ export const useAlertStore = create<AlertState>((set, get) => ({
   current: null,
   queue: [],
 
-  show: (title, message, buttons) => {
+  show: (title, message, buttons, options) => {
     const payload: AlertPayload = {
       id: `alert-${++alertSeq}`,
       title,
       message: message?.trim() || undefined,
       buttons: normalizeButtons(buttons),
       variant: inferVariant(title),
+      onBackdrop: options?.onBackdrop,
     };
 
     const { current, queue } = get();

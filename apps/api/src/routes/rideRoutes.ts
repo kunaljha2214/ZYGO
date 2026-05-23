@@ -39,6 +39,10 @@ export function buildRideRoutes(): Router {
     void rides.getRide(req as AuthedRequest, res, next);
   };
 
+  const getRideContactHandler: RequestHandler = (req, res, next) => {
+    void rides.getRideContact(req as AuthedRequest, res, next);
+  };
+
   const cancelRideHandler: RequestHandler = (req, res, next) => {
     void rides.cancelRide(req as AuthedRequest, res, next);
   };
@@ -51,6 +55,7 @@ export function buildRideRoutes(): Router {
   protectedPart.post('/rides', placeValidators, createRideHandler);
   protectedPart.get('/rides', listRidesHandler);
   protectedPart.get('/rides/:id', getRideHandler);
+  protectedPart.get('/rides/:id/contact', getRideContactHandler);
   protectedPart.patch('/rides/:id/cancel', cancelRideHandler);
 
   const r = Router();

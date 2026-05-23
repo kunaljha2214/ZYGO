@@ -70,9 +70,11 @@ export function AlertMessageCard({ alert, onDismiss, onButtonPress }: Props) {
                     const isDestructive = button.style === 'destructive';
                     const isPrimary =
                       !isCancel &&
+                      !isDestructive &&
                       (buttons.length === 1 ||
-                        index === buttons.length - 1 ||
-                        (!useRow && index === buttons.length - 1));
+                        (useRow && index === buttons.length - 1));
+
+                    const isSecondary = !isCancel && !isDestructive && !isPrimary;
 
                     return (
                       <Pressable
@@ -82,6 +84,7 @@ export function AlertMessageCard({ alert, onDismiss, onButtonPress }: Props) {
                           styles.btn,
                           useRow && styles.btnFlex,
                           isPrimary && styles.btnPrimary,
+                          isSecondary && styles.btnSecondary,
                           isCancel && styles.btnCancel,
                           isDestructive && styles.btnDestructive,
                           pressed && styles.btnPressed,
@@ -92,6 +95,7 @@ export function AlertMessageCard({ alert, onDismiss, onButtonPress }: Props) {
                           style={[
                             styles.btnText,
                             isPrimary && styles.btnTextPrimary,
+                            isSecondary && styles.btnTextSecondary,
                             isCancel && styles.btnTextCancel,
                             isDestructive && styles.btnTextDestructive,
                           ]}
@@ -197,6 +201,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.primaryBright,
   },
+  btnSecondary: {
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
   btnCancel: {
     backgroundColor: 'rgba(168, 85, 247, 0.06)',
     borderWidth: 1,
@@ -216,8 +225,9 @@ const styles = StyleSheet.create({
     height: '46%',
     backgroundColor: 'rgba(255, 255, 255, 0.12)',
   },
-  btnText: { fontSize: 15, fontWeight: '700' },
+  btnText: { fontSize: 15, fontWeight: '700', color: colors.text },
   btnTextPrimary: { color: colors.text, fontWeight: '800' },
-  btnTextCancel: { color: colors.lavender },
+  btnTextSecondary: { color: colors.primaryBright, fontWeight: '800' },
+  btnTextCancel: { color: colors.lavender, fontWeight: '700' },
   btnTextDestructive: { color: colors.error, fontWeight: '800' },
 });

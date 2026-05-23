@@ -47,6 +47,11 @@ export type RideRequest = {
   rideType: string;
 };
 
+export type RidePeerSummary = {
+  id: string;
+  name: string;
+};
+
 export type DriverRide = {
   id: string;
   pickup: { label: string; line1: string; coordinates: { lat: number; lng: number } };
@@ -62,6 +67,7 @@ export type DriverRide = {
   status: string;
   estimatedDriverEarnings?: number;
   createdAt: string;
+  customer?: RidePeerSummary | null;
 };
 
 export type DriverEarningsDashboard = {
