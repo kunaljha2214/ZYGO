@@ -10,6 +10,10 @@ import { useRoute, useFocusEffect } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
+import { TripContactCard } from '../../components/trip/TripContactCard';
+import { callShopOrderCustomer } from '../../utils/placePeerCall';
+import { TripContactCard } from '../../components/trip/TripContactCard';
+import { callShopOrderCustomer } from '../../utils/placePeerCall';
 import {
   acceptShopOrder,
   advanceShopOrderStatus,
@@ -28,6 +32,15 @@ import { spacing } from '../../theme/spacing';
 type R = RouteProp<ShopOrdersStackParamList, 'ShopOrderDetail'>;
 
 const PREP_OPTIONS = [10, 15, 20, 25, 30, 45];
+
+const CUSTOMER_CONTACT_STATUSES = new Set([
+  'confirmed',
+  'preparing',
+  'ready_for_pickup',
+  'rider_assigned',
+  'out_for_delivery',
+  'delivered',
+]);
 
 const FLOW = [
   'placed',
@@ -120,6 +133,14 @@ export function ShopOrderDetailScreen() {
           );
         })}
       </View>
+
+      {order.customer && CUSTOMER_CONTACT_STATUSES.has(order.status) ? (
+        <TripContactCard
+          title="Customer"
+          name={order.customer.name}
+          onCall={() => callShopOrderCustomer(orderId)}
+        />
+      ) : null}
 
       <Card glow style={shared.block}>
         <Text style={shared.h}>Items</Text>

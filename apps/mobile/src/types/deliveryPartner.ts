@@ -56,6 +56,7 @@ export type PartnerOrder = {
   estimatedRiderEarnings?: number;
   deliveryEtaMinutes?: number;
   createdAt: string;
+  customer?: { id: string; name: string } | null;
 };
 
 export type EarningsDashboard = {

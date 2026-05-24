@@ -64,6 +64,7 @@ r.get('/orders/alerts', shopOnly, wrap(shopOrders.getOrderAlerts));
 r.get('/orders/kitchen', shopOnly, wrap(shopOrders.getKitchenDisplay));
 r.get('/orders/insights', shopOnly, wrap(shopOrders.getShopOrderInsights));
 r.get('/orders/:id', shopOnly, wrap(shopOrders.getShopOrder));
+r.get('/orders/:id/contact/customer', shopOnly, wrap(shopOrders.getShopOrderCustomerContact));
 r.post(
   '/orders/:id/accept',
   shopOnly,

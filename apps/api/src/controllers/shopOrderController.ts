@@ -14,6 +14,10 @@ import {
   SHOP_STATUS_FLOW,
 } from '../utils/shopOrderLogic';
 import { startDeliveryDispatch } from '../services/deliveryAssignmentEngine';
+import {
+  getCustomerContactForShopOwner,
+  getCustomerDisplayName,
+} from '../services/orderPeerContact';
 
 function formatShopOrder(o: Record<string, unknown>) {
   const items = o.items as { name: string; price: number; quantity: number }[];
@@ -213,6 +217,14 @@ export async function getShopOrderInsights(
   }
 }
 
+async function formatShopOrderWithCustomer(order: InstanceType<typeof FoodOrder>) {
+  const customer = await getCustomerDisplayName(order.userId);
+  return {
+    ...formatShopOrder(order.toObject() as unknown as Record<string, unknown>),
+    customer,
+  };
+}
+
 export async function getShopOrder(
   req: AuthedRequest,
   res: Response,
@@ -220,7 +232,20 @@ export async function getShopOrder(
 ): Promise<void> {
   try {
     const { order } = await getOwnerOrder(req, req.params.id);
-    res.json(formatShopOrder(order.toObject() as unknown as Record<string, unknown>));
+    res.json(await formatShopOrderWithCustomer(order));
+  } catch (e) {
+    next(e);
+  }
+}
+
+export async function getShopOrderCustomerContact(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const contact = await getCustomerContactForShopOwner(req.params.id, req.user!.sub);
+    res.json(contact);
   } catch (e) {
     next(e);
   }
@@ -255,7 +280,7 @@ export async function acceptOrder(
     order.kitchenStation = routeKitchenStation(order.items);
     order.delayRiskMinutes = predictDelayMinutes(queue, 18, order.estimatedPrepMinutes);
     await order.save();
-    res.json(formatShopOrder(order.toObject() as unknown as Record<string, unknown>));
+    res.json(await formatShopOrderWithCustomer(order));
   } catch (e) {
     next(e);
   }
@@ -314,7 +339,7 @@ export async function advanceOrderStatus(
     if (target === 'out_for_delivery') order.outForDeliveryAt = new Date();
     if (target === 'delivered') order.deliveredAt = new Date();
     await refreshDelayAndStation(order, restaurantId);
-    res.json(formatShopOrder(order.toObject() as unknown as Record<string, unknown>));
+    res.json(await formatShopOrderWithCustomer(order));
   } catch (e) {
     next(e);
   }

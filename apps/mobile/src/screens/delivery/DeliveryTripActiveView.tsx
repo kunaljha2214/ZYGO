@@ -11,6 +11,16 @@ import type { PartnerOrder } from '../../types/deliveryPartner';
 import { colors, radii, spacing } from '../../theme';
 import { formatInr } from '../../utils/formatMoney';
 import { drivingDirectionsUrl } from '../../utils/navigationUrl';
+import { TripContactCard } from '../../components/trip/TripContactCard';
+import { callDeliveryOrderCustomer } from '../../utils/placePeerCall';
+
+const CUSTOMER_CONTACT_STATUSES = new Set([
+  'accepted',
+  'arriving_at_restaurant',
+  'picked_up',
+  'out_for_delivery',
+  'delivered',
+]);
 
 const STATUS_LABELS: Record<string, string> = {
   accepted: 'Accepted — head to restaurant',
@@ -95,6 +105,14 @@ export function DeliveryTripActiveView({ order, onOrderUpdated }: Props) {
       </View>
 
       <DeliveryStatusPills status={current.deliveryStatus} />
+
+      {current.customer && CUSTOMER_CONTACT_STATUSES.has(current.deliveryStatus) ? (
+        <TripContactCard
+          title="Customer"
+          name={current.customer.name}
+          onCall={() => callDeliveryOrderCustomer(current.id)}
+        />
+      ) : null}
 
       <GlassCard glow style={styles.card}>
         <Text style={styles.cardLabel}>Restaurant</Text>

@@ -20,6 +20,14 @@ const getOrderHandler: RequestHandler = (req, res, next) => {
   void orders.getOrder(req as AuthedRequest, res, next);
 };
 
+const getOrderRestaurantContactHandler: RequestHandler = (req, res, next) => {
+  void orders.getOrderRestaurantContact(req as AuthedRequest, res, next);
+};
+
+const getOrderRiderContactHandler: RequestHandler = (req, res, next) => {
+  void orders.getOrderRiderContact(req as AuthedRequest, res, next);
+};
+
 const cancelOrderHandler: RequestHandler = (req, res, next) => {
   void orders.cancelOrder(req as AuthedRequest, res, next);
 };
@@ -45,7 +53,8 @@ r.post(
 r.get('/orders', listOrdersHandler);
 
 r.get('/orders/:id', getOrderHandler);
-
+r.get('/orders/:id/contact/restaurant', getOrderRestaurantContactHandler);
+r.get('/orders/:id/contact/rider', getOrderRiderContactHandler);
 r.patch('/orders/:id/cancel', cancelOrderHandler);
 
 export default r;

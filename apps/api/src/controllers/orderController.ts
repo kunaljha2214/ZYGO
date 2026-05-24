@@ -10,6 +10,12 @@ import { generateOrderNumber } from '../utils/geo';
 import type { IMenuItem } from '../models/MenuItem';
 import { ShopOffer } from '../models/ShopOffer';
 import { validateShopOffer } from '../services/offerValidation';
+import {
+  getRestaurantContactForCustomer,
+  getRiderContactForCustomer,
+  getRestaurantSummaryForListing,
+  getRiderDisplayName,
+} from '../services/orderPeerContact';
 
 type OrderLineInput = {
   menuItemId: string;
@@ -211,6 +217,10 @@ export async function getOrder(
       return;
     }
     const formatted = formatOrderLean(order as Record<string, unknown>);
+    const [restaurant, rider] = await Promise.all([
+      getRestaurantSummaryForListing(order.restaurantId),
+      order.deliveryPartnerId ? getRiderDisplayName(order.deliveryPartnerId) : Promise.resolve(null),
+    ]);
     const storedCoords = (order as { restaurantCoords?: { lat?: number } }).restaurantCoords;
     if (formatted.restaurantCoords && !storedCoords?.lat) {
       void FoodOrder.updateOne(
@@ -221,7 +231,41 @@ export async function getOrder(
         }
       );
     }
-    res.json(formatted);
+    res.json({ ...formatted, restaurant, rider });
+  } catch (e) {
+    next(e);
+  }
+}
+
+export async function getOrderRestaurantContact(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (!req.user) {
+      next(createError(401));
+      return;
+    }
+    const contact = await getRestaurantContactForCustomer(req.params.id, req.user.sub);
+    res.json(contact);
+  } catch (e) {
+    next(e);
+  }
+}
+
+export async function getOrderRiderContact(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (!req.user) {
+      next(createError(401));
+      return;
+    }
+    const contact = await getRiderContactForCustomer(req.params.id, req.user.sub);
+    res.json(contact);
   } catch (e) {
     next(e);
   }

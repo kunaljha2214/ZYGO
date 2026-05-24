@@ -9,6 +9,8 @@ import { api } from '../api/client';
 import { StatusStepper } from '../components/StatusStepper';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
+import { TripContactCard } from '../components/trip/TripContactCard';
+import { callOrderRestaurant, callOrderRider } from '../utils/placePeerCall';
 import { shared } from '../theme/styles';
 import { connectOrderTracking, disconnectOrderTracking } from '../services/orderSocket';
 import { colors } from '../theme';
@@ -19,6 +21,19 @@ import {
 
 const TRACK_MAP_STATUSES = new Set(['rider_assigned', 'out_for_delivery']);
 
+const RESTAURANT_CONTACT_STATUSES = new Set([
+  'confirmed',
+  'preparing',
+  'ready_for_pickup',
+  'rider_assigned',
+  'out_for_delivery',
+  'delivered',
+]);
+
+const RIDER_CONTACT_STATUSES = new Set(['rider_assigned', 'out_for_delivery', 'delivered']);
+
+type OrderPeerSummary = { id: string; name: string };
+
 type FoodOrder = {
   id: string;
   type: 'food';
@@ -26,6 +41,8 @@ type FoodOrder = {
   restaurantId?: string | { id?: string; _id?: string };
   restaurantName?: string;
   restaurantCoords?: { lat: number; lng: number } | null;
+  restaurant?: OrderPeerSummary | null;
+  rider?: OrderPeerSummary | null;
   items: { name: string; price: number; quantity: number }[];
   subtotal?: number;
   discountAmount?: number;
@@ -141,6 +158,22 @@ export function OrderTrackScreen() {
         <Text style={styles.eta}>ETA ~{data.deliveryEtaMinutes} min</Text>
       ) : null}
       <StatusStepper kind="food" status={data.status} />
+
+      {data.restaurant && RESTAURANT_CONTACT_STATUSES.has(data.status) ? (
+        <TripContactCard
+          title="Restaurant"
+          name={data.restaurant.name}
+          onCall={() => callOrderRestaurant(orderId)}
+        />
+      ) : null}
+
+      {data.rider && RIDER_CONTACT_STATUSES.has(data.status) ? (
+        <TripContactCard
+          title="Delivery partner"
+          name={data.rider.name}
+          onCall={() => callOrderRider(orderId)}
+        />
+      ) : null}
 
       {showMap && customer ? (
         <View

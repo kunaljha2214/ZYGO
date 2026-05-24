@@ -3,6 +3,7 @@ export type ShopOrderStatus =
   | 'confirmed'
   | 'preparing'
   | 'ready_for_pickup'
+  | 'rider_assigned'
   | 'out_for_delivery'
   | 'delivered'
   | 'cancelled';
@@ -11,6 +12,11 @@ export type ShopOrderItem = {
   name: string;
   price: number;
   quantity: number;
+};
+
+export type OrderPeerSummary = {
+  id: string;
+  name: string;
 };
 
 export type ShopOrder = {
@@ -34,6 +40,7 @@ export type ShopOrder = {
   updatedAt: string;
   nextAction: ShopOrderStatus | null;
   shouldPrintInvoice: boolean;
+  customer?: OrderPeerSummary | null;
 };
 
 export type OrderBatch = {

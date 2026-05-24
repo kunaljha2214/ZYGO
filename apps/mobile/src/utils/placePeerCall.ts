@@ -32,3 +32,23 @@ export function callRideCaptain(rideId: string): Promise<void> {
 export function callRideCustomer(rideId: string): Promise<void> {
   return dialFromEndpoint(`/driver/rides/${rideId}/contact`);
 }
+
+/** Customer → restaurant (shop owner phone). */
+export function callOrderRestaurant(orderId: string): Promise<void> {
+  return dialFromEndpoint(`/orders/${orderId}/contact/restaurant`);
+}
+
+/** Customer → delivery rider. */
+export function callOrderRider(orderId: string): Promise<void> {
+  return dialFromEndpoint(`/orders/${orderId}/contact/rider`);
+}
+
+/** Shop owner → customer. */
+export function callShopOrderCustomer(orderId: string): Promise<void> {
+  return dialFromEndpoint(`/shop/orders/${orderId}/contact/customer`);
+}
+
+/** Delivery partner → customer. */
+export function callDeliveryOrderCustomer(orderId: string): Promise<void> {
+  return dialFromEndpoint(`/delivery-partner/orders/${orderId}/contact/customer`);
+}

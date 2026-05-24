@@ -16,6 +16,10 @@ import {
 import { haversineKm } from '../utils/geo';
 import { saveBase64Document } from '../utils/uploads';
 import { emitToOrder, emitToUser } from '../socket/io';
+import {
+  getCustomerContactForDeliveryPartner,
+  getCustomerDisplayName,
+} from '../services/orderPeerContact';
 
 const DOC_TYPES = ['aadhaar', 'pan', 'driving_license', 'rc', 'profile_photo'] as const;
 
@@ -304,6 +308,7 @@ async function formatPartnerOrder(o: Record<string, unknown>) {
   const restaurant = o.restaurantId
     ? await Restaurant.findById(o.restaurantId as string).lean()
     : null;
+  const customer = await getCustomerDisplayName(o.userId as string);
   return {
     id: String(o._id),
     orderNumber: o.orderNumber,
@@ -321,7 +326,24 @@ async function formatPartnerOrder(o: Record<string, unknown>) {
     estimatedRiderEarnings: o.estimatedRiderEarnings,
     deliveryEtaMinutes: o.deliveryEtaMinutes,
     createdAt: o.createdAt,
+    customer,
   };
+}
+
+export async function getDeliveryOrderCustomerContact(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const contact = await getCustomerContactForDeliveryPartner(
+      req.params.orderId,
+      req.user!.sub
+    );
+    res.json(contact);
+  } catch (e) {
+    next(e);
+  }
 }
 
 export async function getIncomingRequest(req: AuthedRequest, res: Response, next: NextFunction) {
