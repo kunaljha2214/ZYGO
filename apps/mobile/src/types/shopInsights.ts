@@ -105,6 +105,7 @@ export type ShopOffer = {
   minOrderAmount: number;
   comboItemNames: string[];
   isActive: boolean;
+  isExpired?: boolean;
   startDate: string;
   endDate: string;
   happyHourStart?: string;
@@ -115,6 +116,11 @@ export type ShopOffer = {
   usageCount: number;
   targetCustomerIds: string[];
   createdAt: string;
+};
+
+export type ShopOffersResponse = {
+  activeOffers: ShopOffer[];
+  historyOffers: ShopOffer[];
 };
 
 export type OfferCampaign = {

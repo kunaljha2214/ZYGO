@@ -1,7 +1,6 @@
 import createError from 'http-errors';
 import { validationResult } from 'express-validator';
 import type { Response, NextFunction } from 'express';
-import { Types } from 'mongoose';
 import type { AuthedRequest } from '../middleware/auth';
 import { ShopOffer } from '../models/ShopOffer';
 import { Restaurant } from '../models/Restaurant';
@@ -25,23 +24,25 @@ export async function listRestaurantOffers(
 
     const now = new Date();
     const userId = req.user.sub;
-    const userOid = new Types.ObjectId(userId);
     const offers = await ShopOffer.find({
       restaurantId: restaurant._id,
       isActive: true,
       startDate: { $lte: now },
       endDate: { $gte: now },
-      $or: [
-        { targetCustomerIds: { $size: 0 } },
-        { targetCustomerIds: { $in: [userOid] } },
-      ],
     })
       .sort({ createdAt: -1 })
       .lean();
 
-    const visible = offers.filter(
-      (o) => o.maxUses == null || o.usageCount < o.maxUses
-    );
+    const visible = offers.filter((o) => {
+      const targets = o.targetCustomerIds ?? [];
+      if (targets.length > 0 && !targets.some((id) => id.toString() === userId)) {
+        return false;
+      }
+      if (o.maxUses != null && o.usageCount >= o.maxUses) {
+        return false;
+      }
+      return true;
+    });
 
     res.json({
       offers: visible.map((o) => serializePublicOffer(o)),

@@ -6,8 +6,39 @@ import { ShopOffer, type ShopOfferType, type ShopCampaignType } from '../models/
 import { ShopCustomerProfile } from '../models/ShopCustomerProfile';
 import { requireApprovedRestaurantId } from '../utils/menuAccess';
 
-function serializeOffer(doc: InstanceType<typeof ShopOffer>) {
-  const o = doc.toObject();
+type OfferLean = {
+  _id: { toString(): string };
+  title: string;
+  code: string;
+  offerType: ShopOfferType;
+  discountValue: number;
+  minOrderAmount: number;
+  comboItemNames: string[];
+  isActive: boolean;
+  startDate: Date;
+  endDate: Date;
+  happyHourStart?: string;
+  happyHourEnd?: string;
+  campaignType: ShopCampaignType;
+  festivalName?: string;
+  maxUses?: number;
+  usageCount: number;
+  targetCustomerIds?: { toString(): string }[];
+  createdAt: Date;
+};
+
+function isOfferExpired(endDate: Date, now = new Date()): boolean {
+  return endDate < now;
+}
+
+function endDateFromDays(start: Date, days: number): Date {
+  const end = new Date(start);
+  end.setDate(end.getDate() + days);
+  end.setHours(23, 59, 59, 999);
+  return end;
+}
+
+function serializeOfferLean(o: OfferLean) {
   return {
     id: o._id.toString(),
     title: o.title,
@@ -15,7 +46,7 @@ function serializeOffer(doc: InstanceType<typeof ShopOffer>) {
     offerType: o.offerType,
     discountValue: o.discountValue,
     minOrderAmount: o.minOrderAmount,
-    comboItemNames: o.comboItemNames,
+    comboItemNames: o.comboItemNames ?? [],
     isActive: o.isActive,
     startDate: o.startDate,
     endDate: o.endDate,
@@ -27,7 +58,12 @@ function serializeOffer(doc: InstanceType<typeof ShopOffer>) {
     usageCount: o.usageCount,
     targetCustomerIds: o.targetCustomerIds?.map((id) => id.toString()) ?? [],
     createdAt: o.createdAt,
+    isExpired: isOfferExpired(o.endDate),
   };
+}
+
+function serializeOffer(doc: InstanceType<typeof ShopOffer>) {
+  return serializeOfferLean(doc.toObject() as OfferLean);
 }
 
 export async function listOffers(
@@ -38,28 +74,11 @@ export async function listOffers(
   try {
     const restaurantId = await requireApprovedRestaurantId(req.user!.sub);
     const offers = await ShopOffer.find({ restaurantId }).sort({ createdAt: -1 }).lean();
-    res.json({
-      offers: offers.map((o) => ({
-        id: o._id.toString(),
-        title: o.title,
-        code: o.code,
-        offerType: o.offerType,
-        discountValue: o.discountValue,
-        minOrderAmount: o.minOrderAmount,
-        comboItemNames: o.comboItemNames,
-        isActive: o.isActive,
-        startDate: o.startDate,
-        endDate: o.endDate,
-        happyHourStart: o.happyHourStart,
-        happyHourEnd: o.happyHourEnd,
-        campaignType: o.campaignType,
-        festivalName: o.festivalName,
-        maxUses: o.maxUses,
-        usageCount: o.usageCount,
-        targetCustomerIds: o.targetCustomerIds?.map((id) => id.toString()) ?? [],
-        createdAt: o.createdAt,
-      })),
-    });
+    const now = new Date();
+    const serialized = offers.map((o) => serializeOfferLean(o as OfferLean));
+    const activeOffers = serialized.filter((o) => !isOfferExpired(new Date(o.endDate), now));
+    const historyOffers = serialized.filter((o) => isOfferExpired(new Date(o.endDate), now));
+    res.json({ activeOffers, historyOffers });
   } catch (e) {
     next(e);
   }
@@ -120,6 +139,7 @@ export async function updateOffer(
       return;
     }
     const body = req.body as Record<string, unknown>;
+    const wasExpired = isOfferExpired(doc.endDate);
     if (body.title) doc.title = String(body.title).trim();
     if (body.code) doc.code = String(body.code).trim().toUpperCase();
     if (body.offerType) doc.offerType = body.offerType as ShopOfferType;
@@ -129,6 +149,14 @@ export async function updateOffer(
     if (body.isActive !== undefined) doc.isActive = Boolean(body.isActive);
     if (body.startDate) doc.startDate = new Date(String(body.startDate));
     if (body.endDate) doc.endDate = new Date(String(body.endDate));
+    if (
+      body.endDate &&
+      wasExpired &&
+      !isOfferExpired(doc.endDate) &&
+      body.isActive === undefined
+    ) {
+      doc.isActive = true;
+    }
     if (body.happyHourStart !== undefined) doc.happyHourStart = body.happyHourStart as string;
     if (body.happyHourEnd !== undefined) doc.happyHourEnd = body.happyHourEnd as string;
     if (body.campaignType) doc.campaignType = body.campaignType as ShopCampaignType;
@@ -171,7 +199,43 @@ export async function toggleOffer(
       next(createError(404));
       return;
     }
+    if (isOfferExpired(doc.endDate)) {
+      next(createError(400, 'Offer has expired. Extend it from offer history.'));
+      return;
+    }
     doc.isActive = !doc.isActive;
+    await doc.save();
+    res.json(serializeOffer(doc));
+  } catch (e) {
+    next(e);
+  }
+}
+
+export async function reactivateOffer(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const restaurantId = await requireApprovedRestaurantId(req.user!.sub);
+    const doc = await ShopOffer.findOne({ _id: req.params.id, restaurantId });
+    if (!doc) {
+      next(createError(404));
+      return;
+    }
+    if (!isOfferExpired(doc.endDate)) {
+      next(createError(400, 'Only expired offers can be reactivated from history'));
+      return;
+    }
+
+    const body = req.body as { validityDays?: number };
+    const validityDays = Math.min(365, Math.max(1, Number(body.validityDays) || 30));
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+
+    doc.startDate = start;
+    doc.endDate = endDateFromDays(start, validityDays);
+    doc.isActive = true;
     await doc.save();
     res.json(serializeOffer(doc));
   } catch (e) {
@@ -251,6 +315,8 @@ export async function listCampaigns(
     const campaigns = await ShopOffer.find({
       restaurantId,
       campaignType: { $in: ['happy_hour', 'festival'] },
+      isActive: true,
+      startDate: { $lte: now },
       endDate: { $gte: now },
     })
       .sort({ startDate: -1 })

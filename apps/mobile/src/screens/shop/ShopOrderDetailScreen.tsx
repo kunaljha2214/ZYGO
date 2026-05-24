@@ -12,8 +12,6 @@ import { Button } from '../../components/Button';
 import { Card } from '../../components/Card';
 import { TripContactCard } from '../../components/trip/TripContactCard';
 import { callShopOrderCustomer } from '../../utils/placePeerCall';
-import { TripContactCard } from '../../components/trip/TripContactCard';
-import { callShopOrderCustomer } from '../../utils/placePeerCall';
 import {
   acceptShopOrder,
   advanceShopOrderStatus,

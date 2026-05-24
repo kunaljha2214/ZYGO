@@ -1,18 +1,36 @@
-import { Linking } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import { isAxiosError } from 'axios';
 import { api } from '../api/client';
 import { AppAlert } from '../alert';
 
-async function dialFromEndpoint(path: string): Promise<void> {
-  try {
-    const { data } = await api.get<{ dialNumber: string }>(path);
-    const tel = `tel:${data.dialNumber}`;
+function buildTelUrl(dialNumber: string): string {
+  const trimmed = dialNumber.trim();
+  if (trimmed.startsWith('tel:')) return trimmed;
+  return `tel:${trimmed}`;
+}
+
+async function openDialer(dialNumber: string): Promise<void> {
+  const tel = buildTelUrl(dialNumber);
+  // Android 11+ often returns false from canOpenURL for tel: unless manifest
+  // queries are declared — open the dialer directly instead.
+  if (Platform.OS === 'ios') {
     const can = await Linking.canOpenURL(tel);
     if (!can) {
       AppAlert.alert('Call unavailable', 'Could not open your phone dialer.');
       return;
     }
-    await Linking.openURL(tel);
+  }
+  await Linking.openURL(tel);
+}
+
+async function dialFromEndpoint(path: string): Promise<void> {
+  try {
+    const { data } = await api.get<{ dialNumber: string }>(path);
+    if (!data.dialNumber?.trim()) {
+      AppAlert.alert('Call unavailable', 'Contact number not available.');
+      return;
+    }
+    await openDialer(data.dialNumber);
   } catch (e) {
     const msg = isAxiosError(e)
       ? (e.response?.data as { message?: string })?.message ?? e.message

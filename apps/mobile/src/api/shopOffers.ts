@@ -1,9 +1,47 @@
 import { api } from './client';
-import type { OfferCampaign, ShopOffer, ShopOfferType, ShopCampaignType } from '../types/shopInsights';
+import type { OfferCampaign, ShopOffer, ShopOffersResponse, ShopOfferType, ShopCampaignType } from '../types/shopInsights';
 
-export async function fetchShopOffers() {
-  const { data } = await api.get<{ offers: ShopOffer[] }>('/shop/offers');
-  return data.offers;
+type ShopOffersApiResponse = ShopOffersResponse & { offers?: ShopOffer[] };
+
+function isOfferExpired(endDate: string): boolean {
+  const end = new Date(endDate);
+  return !Number.isNaN(end.getTime()) && end < new Date();
+}
+
+function splitOffersByExpiry(offers: ShopOffer[]): ShopOffersResponse {
+  const activeOffers: ShopOffer[] = [];
+  const historyOffers: ShopOffer[] = [];
+  for (const offer of offers) {
+    if (isOfferExpired(offer.endDate)) {
+      historyOffers.push({ ...offer, isExpired: true });
+    } else {
+      activeOffers.push({ ...offer, isExpired: false });
+    }
+  }
+  return { activeOffers, historyOffers };
+}
+
+function normalizeShopOffersResponse(data: ShopOffersApiResponse): ShopOffersResponse {
+  if (Array.isArray(data.activeOffers) && Array.isArray(data.historyOffers)) {
+    return {
+      activeOffers: data.activeOffers,
+      historyOffers: data.historyOffers,
+    };
+  }
+  if (Array.isArray(data.offers)) {
+    return splitOffersByExpiry(data.offers);
+  }
+  return { activeOffers: [], historyOffers: [] };
+}
+
+export async function fetchShopOffers(): Promise<ShopOffersResponse> {
+  const { data } = await api.get<ShopOffersApiResponse>('/shop/offers');
+  return normalizeShopOffersResponse(data);
+}
+
+export async function fetchAllShopOffers(): Promise<ShopOffer[]> {
+  const { activeOffers, historyOffers } = await fetchShopOffers();
+  return [...(activeOffers ?? []), ...(historyOffers ?? [])];
 }
 
 export async function fetchOfferCampaigns() {
@@ -56,5 +94,10 @@ export async function deleteShopOffer(id: string) {
 
 export async function toggleShopOffer(id: string) {
   const { data } = await api.patch<ShopOffer>(`/shop/offers/${id}/toggle`);
+  return data;
+}
+
+export async function reactivateShopOffer(id: string, validityDays = 30) {
+  const { data } = await api.post<ShopOffer>(`/shop/offers/${id}/reactivate`, { validityDays });
   return data;
 }

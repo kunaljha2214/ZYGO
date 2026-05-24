@@ -140,6 +140,12 @@ r.post(
 r.put('/offers/:id', shopOnly, wrap(shopOffers.updateOffer));
 r.delete('/offers/:id', shopOnly, wrap(shopOffers.deleteOffer));
 r.patch('/offers/:id/toggle', shopOnly, wrap(shopOffers.toggleOffer));
+r.post(
+  '/offers/:id/reactivate',
+  shopOnly,
+  [body('validityDays').optional().isInt({ min: 1, max: 365 })],
+  wrap(shopOffers.reactivateOffer)
+);
 
 r.get('/restaurant/pending', adminOnly, wrap(shop.listPendingRegistrations));
 

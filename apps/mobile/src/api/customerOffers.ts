@@ -7,6 +7,7 @@ export type CustomerOffer = {
   offerType: string;
   discountValue: number;
   minOrderAmount: number;
+  comboItemNames?: string[];
   summary: string;
   campaignType: string;
   festivalName?: string;

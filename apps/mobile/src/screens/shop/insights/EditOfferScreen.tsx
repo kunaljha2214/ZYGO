@@ -14,7 +14,7 @@ import type { RouteProp } from '@react-navigation/native';
 import { Button } from '../../../components/Button';
 import {
   createShopOffer,
-  fetchShopOffers,
+  fetchAllShopOffers,
   updateShopOffer,
   type CreateOfferPayload} from '../../../api/shopOffers';
 import type { ShopCampaignType, ShopOfferType } from '../../../types/shopInsights';
@@ -84,7 +84,7 @@ export function EditOfferScreen() {
     if (!offerId) return;
     setLoading(true);
     try {
-      const offers = await fetchShopOffers();
+      const offers = await fetchAllShopOffers();
       const o = offers.find((x) => x.id === offerId);
       if (!o) {
         AppAlert.alert('Not found', 'Offer missing');

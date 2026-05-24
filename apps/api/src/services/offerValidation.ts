@@ -39,15 +39,26 @@ function isWithinHappyHour(now: Date, start: string, end: string): boolean {
   return mins >= from || mins <= to;
 }
 
+function normalizeItemName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function namesMatch(cartName: string, comboName: string): boolean {
+  const cart = normalizeItemName(cartName);
+  const combo = normalizeItemName(comboName);
+  if (!combo) return true;
+  if (cart === combo || cart.includes(combo) || combo.includes(cart)) return true;
+  const cartTokens = cart.split(' ').filter(Boolean);
+  const comboTokens = combo.split(' ').filter(Boolean);
+  return comboTokens.every((token) => cartTokens.some((t) => t.includes(token) || token.includes(t)));
+}
+
 function cartMatchesCombo(cartItemNames: string[], comboItemNames: string[]): boolean {
   if (comboItemNames.length === 0) return true;
-  const cartLower = cartItemNames.map((n) => n.toLowerCase());
   return comboItemNames.every((combo) => {
-    const key = combo.trim().toLowerCase();
+    const key = combo.trim();
     if (!key) return true;
-    return cartLower.some(
-      (name) => name.includes(key) || key.includes(name)
-    );
+    return cartItemNames.some((name) => namesMatch(name, key));
   });
 }
 
@@ -167,6 +178,7 @@ export function serializePublicOffer(o: IShopOffer | Record<string, unknown>) {
     offerType: doc.offerType,
     discountValue: doc.discountValue,
     minOrderAmount: doc.minOrderAmount,
+    comboItemNames: doc.comboItemNames ?? [],
     summary,
     campaignType: doc.campaignType,
     festivalName: doc.festivalName,

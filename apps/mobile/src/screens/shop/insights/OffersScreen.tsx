@@ -15,6 +15,7 @@ import {
   fetchAiCouponTargeting,
   fetchOfferCampaigns,
   fetchShopOffers,
+  reactivateShopOffer,
   toggleShopOffer} from '../../../api/shopOffers';
 import type { OfferCampaign, ShopOffer } from '../../../types/shopInsights';
 import type { ShopInsightsStackParamList } from '../../../navigation/types';
@@ -39,10 +40,65 @@ function formatOfferDates(start: string, end: string): string {
   return `${fmt(s)} – ${fmt(e)}`;
 }
 
+function OfferCard({
+  offer,
+  history,
+  onToggle,
+  onDelete,
+  onReactivate,
+}: {
+  offer: ShopOffer;
+  history?: boolean;
+  onToggle?: () => void;
+  onDelete: () => void;
+  onReactivate?: () => void;
+}) {
+  const navigation = useNavigation<Nav>();
+  const statusLabel = history ? 'Expired' : offer.isActive ? 'Active' : 'Paused';
+  const statusStyle = history ? styles.expired : offer.isActive ? styles.active : styles.inactive;
+
+  return (
+    <View style={[styles.card, history && styles.cardHistory, !history && !offer.isActive && styles.cardOff]}>
+      <Pressable onPress={() => navigation.navigate('EditOffer', { offerId: offer.id })}>
+        <View style={styles.cardTop}>
+          <Text style={styles.code}>{offer.code}</Text>
+          <Text style={[styles.status, statusStyle]}>{statusLabel}</Text>
+        </View>
+        <Text style={styles.title}>{offer.title}</Text>
+        <Text style={styles.meta}>
+          {offerLabel(offer)} · min ₹{offer.minOrderAmount}
+          {offer.campaignType !== 'standard' ? ` · ${offer.campaignType}` : ''}
+        </Text>
+        {offer.offerType === 'combo' && (offer.comboItemNames?.length ?? 0) > 0 ? (
+          <Text style={styles.comboHint}>Items: {(offer.comboItemNames ?? []).join(', ')}</Text>
+        ) : null}
+        <Text style={styles.dates}>
+          {history ? 'Ended' : 'Valid'} {formatOfferDates(offer.startDate, offer.endDate)}
+        </Text>
+      </Pressable>
+      <View style={styles.actions}>
+        {history ? (
+          <Pressable onPress={onReactivate}>
+            <Text style={[styles.actionText, styles.reactivate]}>Extend & reactivate</Text>
+          </Pressable>
+        ) : (
+          <Pressable onPress={onToggle}>
+            <Text style={styles.actionText}>{offer.isActive ? 'Pause' : 'Activate'}</Text>
+          </Pressable>
+        )}
+        <Pressable onPress={onDelete}>
+          <Text style={[styles.actionText, styles.delete]}>Delete</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 export function OffersScreen() {
   const navigation = useNavigation<Nav>();
   const inset = useAppInsets({ header: true });
-  const [offers, setOffers] = useState<ShopOffer[]>([]);
+  const [activeOffers, setActiveOffers] = useState<ShopOffer[]>([]);
+  const [historyOffers, setHistoryOffers] = useState<ShopOffer[]>([]);
   const [campaigns, setCampaigns] = useState<OfferCampaign[]>([]);
   const [aiNote, setAiNote] = useState('');
   const [loading, setLoading] = useState(true);
@@ -50,16 +106,18 @@ export function OffersScreen() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [o, c, ai] = await Promise.all([
+      const [offers, c, ai] = await Promise.all([
         fetchShopOffers(),
         fetchOfferCampaigns(),
         fetchAiCouponTargeting(),
       ]);
-      setOffers(o);
+      setActiveOffers(offers.activeOffers ?? []);
+      setHistoryOffers(offers.historyOffers ?? []);
       setCampaigns(c);
       setAiNote(ai.aiNote);
     } catch {
-      setOffers([]);
+      setActiveOffers([]);
+      setHistoryOffers([]);
     } finally {
       setLoading(false);
     }
@@ -78,6 +136,36 @@ export function OffersScreen() {
     } catch (e) {
       AppAlert.alert('Error', e instanceof Error ? e.message : 'Failed');
     }
+  };
+
+  const reactivateWithDays = async (offer: ShopOffer, days: number) => {
+    try {
+      await reactivateShopOffer(offer.id, days);
+      await load();
+      AppAlert.alert('Reactivated', `${offer.code} is live again for ${days} days.`);
+    } catch (e) {
+      AppAlert.alert('Error', e instanceof Error ? e.message : 'Failed');
+    }
+  };
+
+  const onReactivate = (offer: ShopOffer) => {
+    AppAlert.alert(
+      'Extend & reactivate',
+      `Bring back "${offer.title}" (${offer.code}) with the same details. Default extension is 30 days, or set custom dates in the editor.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Custom dates',
+          onPress: () => navigation.navigate('EditOffer', { offerId: offer.id }),
+        },
+        {
+          text: '30 days',
+          onPress: () => {
+            void reactivateWithDays(offer, 30);
+          },
+        },
+      ]
+    );
   };
 
   const onDelete = (id: string, title: string) => {
@@ -100,6 +188,8 @@ export function OffersScreen() {
     ]);
   };
 
+  const hasOffers = activeOffers.length > 0 || historyOffers.length > 0;
+
   return (
     <View style={styles.wrap}>
       <Pressable
@@ -115,7 +205,7 @@ export function OffersScreen() {
           <RefreshControl refreshing={loading} onRefresh={load} tintColor={colors.primary} />
         }
       >
-        {loading && offers.length === 0 ? (
+        {loading && !hasOffers ? (
           <ActivityIndicator color={colors.primaryBright} style={{ marginTop: 24 }} />
         ) : null}
 
@@ -145,37 +235,32 @@ export function OffersScreen() {
           </>
         ) : null}
 
-        <Text style={styles.section}>All offers</Text>
-        {offers.length === 0 ? (
-          <Text style={styles.empty}>No coupons yet. Create your first offer.</Text>
+        <Text style={styles.section}>Active offers</Text>
+        {activeOffers.length === 0 ? (
+          <Text style={styles.emptyHint}>No live coupons. Create one or reactivate from history below.</Text>
         ) : (
-          offers.map((o) => (
-            <View key={o.id} style={[styles.card, !o.isActive && styles.cardOff]}>
-              <Pressable onPress={() => navigation.navigate('EditOffer', { offerId: o.id })}>
-                <View style={styles.cardTop}>
-                  <Text style={styles.code}>{o.code}</Text>
-                  <Text style={[styles.status, o.isActive ? styles.active : styles.inactive]}>
-                    {o.isActive ? 'Active' : 'Paused'}
-                  </Text>
-                </View>
-                <Text style={styles.title}>{o.title}</Text>
-                <Text style={styles.meta}>
-                  {offerLabel(o)} · min ₹{o.minOrderAmount}
-                  {o.campaignType !== 'standard' ? ` · ${o.campaignType}` : ''}
-                </Text>
-                <Text style={styles.dates}>
-                  Valid {formatOfferDates(o.startDate, o.endDate)}
-                </Text>
-              </Pressable>
-              <View style={styles.actions}>
-                <Pressable onPress={() => void onToggle(o.id)}>
-                  <Text style={styles.actionText}>{o.isActive ? 'Pause' : 'Activate'}</Text>
-                </Pressable>
-                <Pressable onPress={() => onDelete(o.id, o.title)}>
-                  <Text style={[styles.actionText, styles.delete]}>Delete</Text>
-                </Pressable>
-              </View>
-            </View>
+          activeOffers.map((o) => (
+            <OfferCard
+              key={o.id}
+              offer={o}
+              onToggle={() => void onToggle(o.id)}
+              onDelete={() => onDelete(o.id, o.title)}
+            />
+          ))
+        )}
+
+        <Text style={styles.section}>Offer history</Text>
+        {historyOffers.length === 0 ? (
+          <Text style={styles.emptyHint}>Expired offers will appear here so you can extend and run them again.</Text>
+        ) : (
+          historyOffers.map((o) => (
+            <OfferCard
+              key={o.id}
+              offer={o}
+              history
+              onReactivate={() => onReactivate(o)}
+              onDelete={() => onDelete(o.id, o.title)}
+            />
           ))
         )}
       </ScrollView>
@@ -217,16 +302,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.cardBorder},
   cardOff: { opacity: 0.65 },
+  cardHistory: { opacity: 0.85, borderColor: colors.chipBorder },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between' },
   code: { color: colors.primaryBright, fontWeight: '900', fontSize: 16 },
   status: { fontSize: 11, fontWeight: '700' },
   active: { color: '#4ade80' },
   inactive: { color: colors.textMuted },
+  expired: { color: colors.error },
   title: { color: colors.text, fontWeight: '700', marginTop: 6 },
   meta: { color: colors.textMuted, fontSize: 12, marginTop: 4 },
+  comboHint: { color: colors.textSecondary, fontSize: 11, marginTop: 4 },
   dates: { color: colors.textSecondary, fontSize: 11, marginTop: 4 },
   actions: { flexDirection: 'row', gap: 16, marginTop: 12 },
   actionText: { color: colors.lavender, fontWeight: '700' },
+  reactivate: { color: colors.primaryBright },
   delete: { color: colors.error },
   aiNote: { color: colors.textSecondary, fontSize: 12, marginBottom: 8 },
-  empty: { color: colors.textMuted, textAlign: 'center', marginTop: 20 }});
+  emptyHint: { color: colors.textMuted, fontSize: 13, marginBottom: 8, lineHeight: 18 },
+});

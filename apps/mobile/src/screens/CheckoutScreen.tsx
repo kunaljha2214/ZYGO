@@ -218,6 +218,11 @@ export function CheckoutScreen({ navigation }: Props) {
                   {o.summary}
                   {o.minOrderAmount > 0 ? ` · min ₹${o.minOrderAmount}` : ''}
                 </Text>
+                {o.offerType === 'combo' && o.comboItemNames && o.comboItemNames.length > 0 ? (
+                  <Text style={styles.offerHint}>
+                    Add to cart: {o.comboItemNames.join(' + ')}
+                  </Text>
+                ) : null}
                 {o.campaignType === 'happy_hour' && o.happyHourStart ? (
                   <Text style={styles.offerHint}>
                     Happy hour {o.happyHourStart}–{o.happyHourEnd}
