@@ -5,6 +5,11 @@ import { Restaurant } from '../models/Restaurant';
 import { DeliveryPartnerProfile } from '../models/DeliveryPartnerProfile';
 import { haversineKm, estimateDurationMin, computeFoodDeliveryEtaMinutes, normalizeLatLng } from '../utils/geo';
 import { emitToPartner, emitToOrder, emitToUser } from '../socket/io';
+import {
+  assertPartnerSubscriptionActive,
+  filterSubscribedPartnerIds,
+  markPartnerFirstOrderCompleted,
+} from './partnerSubscription';
 
 const REQUEST_TIMEOUT_MS = 15_000;
 const SEARCH_RADIUS_KM = Number(process.env.DELIVERY_SEARCH_RADIUS_KM || 5);
@@ -50,7 +55,13 @@ export async function findEligibleRiders(
     currentLocation: { $exists: true, $ne: null },
   }).lean();
 
+  const subscribed = await filterSubscribedPartnerIds(
+    approvedIds,
+    'delivery_partner'
+  );
+
   const ranked = riders
+    .filter((r) => subscribed.has(r._id.toString()))
     .map((r) => {
       const coords = r.currentLocation!.coordinates;
       const lng = coords[0];
@@ -278,6 +289,13 @@ export async function acceptDeliveryRequest(
     return { ok: false, message: 'Request expired or assigned to another rider' };
   }
 
+  try {
+    await assertPartnerSubscriptionActive(partnerId, 'delivery_partner');
+  } catch (e) {
+    const err = e as { message?: string };
+    return { ok: false, message: err.message ?? 'Subscription required' };
+  }
+
   const state = dispatches.get(orderId);
   if (state?.timeout) clearTimeout(state.timeout);
   dispatches.delete(orderId);
@@ -327,6 +345,8 @@ export async function acceptDeliveryRequest(
     status: order.status,
     deliveryStatus: order.deliveryStatus,
   });
+
+  await markPartnerFirstOrderCompleted(partnerId, 'delivery_partner');
 
   return { ok: true };
 }

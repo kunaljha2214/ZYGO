@@ -34,6 +34,10 @@ export interface IDeliveryPartnerProfile extends Document {
   onTimeRate: number;
   walletPending: number;
   walletTotalEarned: number;
+  subscriptionExpiresAt?: Date | null;
+  subscriptionPlanKey?: string | null;
+  partnerFirstOrderCompletedAt?: Date | null;
+  subscriptionGraceExpiresAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -71,6 +75,10 @@ const DeliveryPartnerProfileSchema = new Schema<IDeliveryPartnerProfile>(
     onTimeRate: { type: Number, default: 100, min: 0, max: 100 },
     walletPending: { type: Number, default: 0, min: 0 },
     walletTotalEarned: { type: Number, default: 0, min: 0 },
+    subscriptionExpiresAt: { type: Date, default: null },
+    subscriptionPlanKey: { type: String, default: null },
+    partnerFirstOrderCompletedAt: { type: Date, default: null },
+    subscriptionGraceExpiresAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

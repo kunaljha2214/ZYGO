@@ -8,6 +8,10 @@ const r = Router();
 
 r.use(authMiddleware);
 
+const quoteOrderHandler: RequestHandler = (req, res, next) => {
+  void orders.quoteOrder(req as AuthedRequest, res, next);
+};
+
 const createOrderHandler: RequestHandler = (req, res, next) => {
   void orders.createOrder(req as AuthedRequest, res, next);
 };
@@ -32,6 +36,27 @@ const cancelOrderHandler: RequestHandler = (req, res, next) => {
   void orders.cancelOrder(req as AuthedRequest, res, next);
 };
 
+const verifyOrderPaymentHandler: RequestHandler = (req, res, next) => {
+  void orders.verifyOrderPayment(req as AuthedRequest, res, next);
+};
+
+r.post(
+  '/orders/quote',
+  [
+    body('restaurantId').notEmpty(),
+    body('items').isArray({ min: 1 }),
+    body('items.*.menuItemId').notEmpty(),
+    body('items.*.quantity').isInt({ min: 1 }),
+    body('items.*.variantName').optional().isString(),
+    body('items.*.addOnNames').optional().isArray(),
+    body('deliveryAddress.coordinates.lat').isFloat(),
+    body('deliveryAddress.coordinates.lng').isFloat(),
+    body('couponCode').optional().isString(),
+    body('fulfillment').optional().isIn(['delivery', 'pickup']),
+  ],
+  quoteOrderHandler
+);
+
 r.post(
   '/orders',
   [
@@ -46,11 +71,22 @@ r.post(
     body('deliveryAddress.coordinates.lat').isFloat(),
     body('deliveryAddress.coordinates.lng').isFloat(),
     body('couponCode').optional().isString(),
+    body('fulfillment').optional().isIn(['delivery', 'pickup']),
   ],
   createOrderHandler
 );
 
 r.get('/orders', listOrdersHandler);
+
+r.post(
+  '/orders/payment/verify',
+  [
+    body('razorpay_order_id').notEmpty(),
+    body('razorpay_payment_id').notEmpty(),
+    body('razorpay_signature').notEmpty(),
+  ],
+  verifyOrderPaymentHandler
+);
 
 r.get('/orders/:id', getOrderHandler);
 r.get('/orders/:id/contact/restaurant', getOrderRestaurantContactHandler);

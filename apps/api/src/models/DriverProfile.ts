@@ -38,6 +38,10 @@ export interface IDriverProfile extends Document {
   completionRate: number;
   walletPending: number;
   walletTotalEarned: number;
+  subscriptionExpiresAt?: Date | null;
+  subscriptionPlanKey?: string | null;
+  partnerFirstOrderCompletedAt?: Date | null;
+  subscriptionGraceExpiresAt?: Date | null;
   onlineHoursToday: number;
   createdAt: Date;
   updatedAt: Date;
@@ -79,6 +83,10 @@ const DriverProfileSchema = new Schema<IDriverProfile>(
     completionRate: { type: Number, default: 100, min: 0, max: 100 },
     walletPending: { type: Number, default: 0, min: 0 },
     walletTotalEarned: { type: Number, default: 0, min: 0 },
+    subscriptionExpiresAt: { type: Date, default: null },
+    subscriptionPlanKey: { type: String, default: null },
+    partnerFirstOrderCompletedAt: { type: Date, default: null },
+    subscriptionGraceExpiresAt: { type: Date, default: null },
     onlineHoursToday: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true }

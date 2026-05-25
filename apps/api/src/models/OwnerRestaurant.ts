@@ -58,6 +58,13 @@ export interface IOwnerRestaurant extends Document {
   rejectionReason?: string | null;
   adminReviewedAt?: Date | null;
   submittedAt?: Date | null;
+  walletPending: number;
+  walletTotalEarned: number;
+  subscriptionExpiresAt?: Date | null;
+  subscriptionPlanKey?: string | null;
+  /** Set when the shop accepts its first order; starts 1-day grace. */
+  partnerFirstOrderCompletedAt?: Date | null;
+  subscriptionGraceExpiresAt?: Date | null;
 }
 
 const OpeningHourSchema = new Schema<IOpeningHour>(
@@ -146,6 +153,12 @@ const OwnerRestaurantSchema = new Schema<IOwnerRestaurant>(
     rejectionReason: { type: String, default: null },
     adminReviewedAt: { type: Date, default: null },
     submittedAt: { type: Date, default: null },
+    walletPending: { type: Number, default: 0, min: 0 },
+    walletTotalEarned: { type: Number, default: 0, min: 0 },
+    subscriptionExpiresAt: { type: Date, default: null },
+    subscriptionPlanKey: { type: String, default: null },
+    partnerFirstOrderCompletedAt: { type: Date, default: null },
+    subscriptionGraceExpiresAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

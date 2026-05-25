@@ -9,6 +9,8 @@ import { api } from '../api/client';
 import { StatusStepper } from '../components/StatusStepper';
 import { Button } from '../components/Button';
 import { Card } from '../components/Card';
+import { OrderPriceBreakdown } from '../components/food/OrderPriceBreakdown';
+import type { CustomerPriceBreakdown } from '../api/orders';
 import { TripContactCard } from '../components/trip/TripContactCard';
 import { callOrderRestaurant, callOrderRider } from '../utils/placePeerCall';
 import { shared } from '../theme/styles';
@@ -48,7 +50,15 @@ type FoodOrder = {
   discountAmount?: number;
   couponCode?: string;
   total: number;
+  paymentStatus?: string;
+  pricing?: CustomerPriceBreakdown;
+  fulfillment?: string;
+  deliveryFee?: number;
+  packageFee?: number;
+  gstAmount?: number;
   status: string;
+  rejectReason?: string | null;
+  acceptExpiresAt?: string | null;
   deliveryStatus?: string;
   deliveryEtaMinutes?: number;
   deliveryAddress: { label: string; line1: string; coordinates?: { lat: number; lng: number } };
@@ -91,6 +101,7 @@ export function OrderTrackScreen() {
     },
     refetchInterval: (q) => {
       const status = q.state.data?.status;
+      if (status === 'placed') return 5000;
       if (status && TRACK_MAP_STATUSES.has(status)) return 5000;
       return false;
     },
@@ -154,6 +165,26 @@ export function OrderTrackScreen() {
       <Text style={shared.orderNum}>{data.orderNumber}</Text>
       {data.restaurantName ? <Text style={shared.meta}>{data.restaurantName}</Text> : null}
       <Text style={shared.stat}>Status: {data.status.replace(/_/g, ' ')}</Text>
+      {data.paymentStatus && data.paymentStatus !== 'paid' && data.paymentStatus !== 'refunded' ? (
+        <Text style={styles.paymentPending}>
+          {data.paymentStatus === 'refund_failed'
+            ? 'Refund could not be processed automatically. Contact Zygo support with your order number.'
+            : `Payment ${data.paymentStatus} — complete payment to confirm your order.`}
+        </Text>
+      ) : null}
+      {data.paymentStatus === 'refunded' ? (
+        <Text style={styles.refunded}>
+          Full refund processed — amount will return to your payment method in 5–7 business days.
+        </Text>
+      ) : null}
+      {data.status === 'placed' ? (
+        <Text style={styles.acceptWindow}>
+          Waiting for restaurant to accept (up to 3 minutes)
+        </Text>
+      ) : null}
+      {data.status === 'cancelled' && data.rejectReason ? (
+        <Text style={styles.cancelReason}>{data.rejectReason}</Text>
+      ) : null}
       {data.deliveryEtaMinutes ? (
         <Text style={styles.eta}>ETA ~{data.deliveryEtaMinutes} min</Text>
       ) : null}
@@ -206,23 +237,22 @@ export function OrderTrackScreen() {
             {it.name} × {it.quantity} — ₹{(it.price * it.quantity).toFixed(2)}
           </Text>
         ))}
-        {(data.discountAmount ?? 0) > 0 ? (
-          <>
-            <Text style={shared.line}>Subtotal ₹{(data.subtotal ?? data.total).toFixed(2)}</Text>
-            <Text style={[shared.line, { color: '#4ade80' }]}>
-              Coupon {data.couponCode} −₹{(data.discountAmount ?? 0).toFixed(2)}
-            </Text>
-          </>
-        ) : null}
-        <Text style={shared.total}>Total ₹{data.total.toFixed(2)}</Text>
       </Card>
+
+      {data.pricing ? (
+        <OrderPriceBreakdown breakdown={data.pricing} couponCode={data.couponCode} />
+      ) : (
+        <Card style={shared.block}>
+          <Text style={shared.total}>Total ₹{data.total.toFixed(2)}</Text>
+        </Card>
+      )}
       <Card style={shared.block}>
         <Text style={shared.h}>Deliver to</Text>
         <Text style={shared.line}>
           {data.deliveryAddress.label}: {data.deliveryAddress.line1}
         </Text>
       </Card>
-      {data.status === 'placed' ? (
+      {data.status === 'placed' || data.status === 'payment_pending' ? (
         <Button
           title="Cancel order"
           variant="ghost"
@@ -238,6 +268,10 @@ const mapH = Math.min(240, Dimensions.get('window').height * 0.32);
 
 const styles = StyleSheet.create({
   eta: { color: colors.primaryBright, fontWeight: '700', marginBottom: 8 },
+  paymentPending: { color: '#fbbf24', fontWeight: '600', marginBottom: 8 },
+  acceptWindow: { color: colors.primaryBright, fontWeight: '600', marginBottom: 8 },
+  cancelReason: { color: colors.error, fontWeight: '600', marginBottom: 8 },
+  refunded: { color: colors.primaryBright, fontWeight: '600', marginBottom: 8 },
   mapWrap: {
     marginVertical: 12,
     borderRadius: 16,

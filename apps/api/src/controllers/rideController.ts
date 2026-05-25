@@ -12,6 +12,11 @@ import {
   getCaptainContactForCustomer,
   getCaptainDisplayName,
 } from '../services/ridePeerContact';
+import {
+  createRidePaymentCheckout,
+  syncLegacyRidePaymentStatus,
+  verifyRidePayment,
+} from '../services/ridePayment';
 
 export async function estimateRide(
   req: AuthedRequest,
@@ -141,14 +146,15 @@ export async function getRide(
     const ride = await RideBooking.findOne({
       _id: req.params.id,
       userId: req.user.sub,
-    }).lean();
+    });
     if (!ride) {
       next(createError(404));
       return;
     }
+    await syncLegacyRidePaymentStatus(ride);
     const captain = await getCaptainDisplayName(ride.captainId);
     res.json({
-      ...formatRideLean(ride as Record<string, unknown>),
+      ...formatRideLean(ride.toObject() as unknown as Record<string, unknown>),
       captain,
     });
   } catch (e) {
@@ -168,6 +174,59 @@ export async function getRideContact(
     }
     const contact = await getCaptainContactForCustomer(req.params.id, req.user.sub);
     res.json(contact);
+  } catch (e) {
+    next(e);
+  }
+}
+
+export async function checkoutRidePayment(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (!req.user) {
+      next(createError(401));
+      return;
+    }
+    const checkout = await createRidePaymentCheckout(req.params.id, req.user.sub);
+    res.status(201).json(checkout);
+  } catch (e) {
+    next(e);
+  }
+}
+
+export async function verifyRidePaymentHandler(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (!req.user) {
+      next(createError(401));
+      return;
+    }
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      next(createError(400, errors.array()[0].msg));
+      return;
+    }
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body as {
+      razorpay_order_id: string;
+      razorpay_payment_id: string;
+      razorpay_signature: string;
+    };
+    const ride = await verifyRidePayment(
+      req.user.sub,
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature
+    );
+    const captain = await getCaptainDisplayName(ride.captainId);
+    res.json({
+      ...formatRideLean(ride.toObject() as unknown as Record<string, unknown>),
+      captain,
+    });
   } catch (e) {
     next(e);
   }
@@ -229,6 +288,8 @@ function formatRideLean(r: Record<string, unknown>) {
     surgeMultiplier: r.surgeMultiplier ?? 1,
     tollCharges: r.tollCharges ?? 0,
     status: r.status,
+    paymentStatus: (r.paymentStatus as string | undefined) ?? 'pending',
+    paidAt: r.paidAt,
     captainId: r.captainId,
     driverLastLocation: r.driverLastLocation,
     createdAt: r.createdAt,

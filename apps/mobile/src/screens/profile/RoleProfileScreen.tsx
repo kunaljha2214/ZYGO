@@ -192,6 +192,15 @@ export function RoleProfileScreen() {
             (navigation as ShopNav).navigate('ReferAndEarn');
           }
           return;
+        case 'subscription':
+          if (role === 'driver') {
+            (navigation as DriverNav).navigate('PartnerSubscription');
+          } else if (role === 'delivery_partner') {
+            (navigation as DeliveryNav).navigate('PartnerSubscription');
+          } else if (role === 'shop_owner') {
+            (navigation as ShopNav).navigate('PartnerSubscription');
+          }
+          return;
         case 'food_delivery':
           if (role === 'customer') {
             openOrdersWithFilter('food');

@@ -15,9 +15,15 @@ import {
 } from '../utils/shopOrderLogic';
 import { startDeliveryDispatch } from '../services/deliveryAssignmentEngine';
 import {
+  assertPartnerSubscriptionActive,
+  markPartnerFirstOrderCompleted,
+} from '../services/partnerSubscription';
+import {
   getCustomerContactForShopOwner,
   getCustomerDisplayName,
 } from '../services/orderPeerContact';
+import { clearRestaurantAcceptTimeout } from '../services/orderAcceptTimeout';
+import { refundPaidFoodOrder } from '../services/orderRefund';
 
 function formatShopOrder(o: Record<string, unknown>) {
   const items = o.items as { name: string; price: number; quantity: number }[];
@@ -33,6 +39,7 @@ function formatShopOrder(o: Record<string, unknown>) {
     customerNotes: o.customerNotes ?? null,
     shopNotes: o.shopNotes ?? null,
     rejectReason: o.rejectReason ?? null,
+    acceptExpiresAt: o.acceptExpiresAt ?? null,
     estimatedPrepMinutes: o.estimatedPrepMinutes ?? null,
     kitchenStation: o.kitchenStation ?? null,
     batchId: o.batchId ?? null,
@@ -267,6 +274,7 @@ export async function acceptOrder(
       next(createError(400, 'Only new orders can be accepted'));
       return;
     }
+    await assertPartnerSubscriptionActive(req.user!.sub, 'shop_owner');
     const prep = Number(req.body.estimatedPrepMinutes) || undefined;
     const itemCount = order.items.reduce((s, i) => s + i.quantity, 0);
     const queue = await FoodOrder.countDocuments({
@@ -279,7 +287,10 @@ export async function acceptOrder(
     order.estimatedPrepMinutes = prep ?? estimatePrepMinutes(itemCount, queue);
     order.kitchenStation = routeKitchenStation(order.items);
     order.delayRiskMinutes = predictDelayMinutes(queue, 18, order.estimatedPrepMinutes);
+    order.acceptExpiresAt = null;
     await order.save();
+    clearRestaurantAcceptTimeout(order._id.toString());
+    await markPartnerFirstOrderCompleted(req.user!.sub, 'shop_owner');
     res.json(await formatShopOrderWithCustomer(order));
   } catch (e) {
     next(e);
@@ -304,8 +315,14 @@ export async function rejectOrder(
     }
     order.status = 'cancelled';
     order.rejectReason = String(req.body.reason).trim();
+    order.acceptExpiresAt = null;
     await order.save();
-    res.json(formatShopOrder(order.toObject() as unknown as Record<string, unknown>));
+    clearRestaurantAcceptTimeout(order._id.toString());
+    await refundPaidFoodOrder(order._id.toString());
+    const fresh = await FoodOrder.findById(order._id);
+    res.json(
+      formatShopOrder((fresh ?? order).toObject() as unknown as Record<string, unknown>)
+    );
   } catch (e) {
     next(e);
   }

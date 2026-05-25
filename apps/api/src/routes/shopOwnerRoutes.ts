@@ -25,6 +25,7 @@ const wrap =
   };
 
 r.get('/restaurant/mine', shopOnly, wrap(shop.getMyRestaurant));
+r.get('/wallet', shopOnly, wrap(shop.getShopWallet));
 
 /** Draft saves per wizard step — full validation runs on submit. */
 r.put('/restaurant', shopOnly, wrap(shop.upsertMyRestaurant));

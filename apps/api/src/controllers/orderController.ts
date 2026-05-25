@@ -3,13 +3,29 @@ import { validationResult } from 'express-validator';
 import type { Response, NextFunction } from 'express';
 import { Types } from 'mongoose';
 import type { AuthedRequest } from '../middleware/auth';
-import { FoodOrder } from '../models/FoodOrder';
-import { MenuItem } from '../models/MenuItem';
+import { FoodOrder, type OrderFulfillment } from '../models/FoodOrder';
 import { Restaurant } from '../models/Restaurant';
+import { User } from '../models/User';
 import { generateOrderNumber } from '../utils/geo';
-import type { IMenuItem } from '../models/MenuItem';
-import { ShopOffer } from '../models/ShopOffer';
 import { validateShopOffer } from '../services/offerValidation';
+import { buildOrderLines, type OrderLineInput } from '../services/orderLineBuilder';
+import {
+  computeOrderPricing,
+  deliveryDistanceKm,
+  formatCustomerQuote,
+  formatCustomerQuoteFromOrder,
+} from '../services/orderPricing';
+import { computeOrderPayouts } from '../services/orderPayouts';
+import {
+  createRazorpayOrder,
+  getRazorpayKeyId,
+  toPaise,
+  verifyPaymentSignature,
+} from '../services/razorpayService';
+import { assertOrderPayableByUser, markFoodOrderPaid } from '../services/orderPayment';
+import { clearRestaurantAcceptTimeout } from '../services/orderAcceptTimeout';
+import { refundPaidFoodOrder } from '../services/orderRefund';
+import { getRazorpayConfig } from '../config/razorpay';
 import {
   getRestaurantContactForCustomer,
   getRiderContactForCustomer,
@@ -17,42 +33,117 @@ import {
   getRiderDisplayName,
 } from '../services/orderPeerContact';
 
-type OrderLineInput = {
-  menuItemId: string;
-  quantity: number;
-  variantName?: string;
-  addOnNames?: string[];
+type PrepareCheckoutInput = {
+  restaurantId: string;
+  items: OrderLineInput[];
+  userId: string;
+  couponCode?: string;
+  deliveryCoordinates: { lat: number; lng: number };
+  fulfillment?: OrderFulfillment;
 };
 
-function resolveOrderLine(
-  mi: IMenuItem,
-  line: OrderLineInput
-): { name: string; price: number } {
-  let price = mi.price;
-  let name = mi.name;
-
-  if (line.variantName?.trim()) {
-    const key = line.variantName.trim().toLowerCase();
-    const variant = mi.variants.find((v) => v.name.trim().toLowerCase() === key);
-    if (!variant) {
-      throw createError(400, `Invalid variant "${line.variantName}" for ${mi.name}`);
-    }
-    price = variant.price;
-    name = `${mi.name} (${variant.name})`;
+async function prepareOrderCheckout(input: PrepareCheckoutInput) {
+  const restaurant = await Restaurant.findById(input.restaurantId);
+  if (!restaurant || !restaurant.isActive) {
+    throw createError(404, 'Restaurant not found');
+  }
+  if (restaurant.isAcceptingOrders === false) {
+    throw createError(403, 'Restaurant is closed and not accepting orders right now');
   }
 
-  const addOnNames = line.addOnNames?.filter((n) => n.trim()) ?? [];
-  for (const addOnName of addOnNames) {
-    const key = addOnName.trim().toLowerCase();
-    const addOn = mi.addOns.find((a) => a.name.trim().toLowerCase() === key);
-    if (!addOn) {
-      throw createError(400, `Invalid add-on "${addOnName}" for ${mi.name}`);
-    }
-    price += addOn.price;
-    name += ` + ${addOn.name}`;
+  const { lineItems, subtotal, cartItemNames } = await buildOrderLines(restaurant, input.items);
+
+  let couponDiscount = 0;
+  let appliedCode: string | undefined;
+  let offerId: Types.ObjectId | undefined;
+  let offerType: string | undefined;
+
+  if (input.couponCode?.trim()) {
+    const validated = await validateShopOffer({
+      restaurantId: restaurant._id,
+      userId: input.userId,
+      subtotal,
+      couponCode: input.couponCode,
+      cartItemNames,
+    });
+    couponDiscount = validated.discountAmount;
+    appliedCode = validated.code;
+    offerId = new Types.ObjectId(validated.offerId);
+    offerType = validated.offerType;
   }
 
-  return { name, price };
+  const fulfillment: OrderFulfillment = input.fulfillment ?? 'delivery';
+  const [lng, lat] = restaurant.location.coordinates;
+  const restaurantCoords = { lat, lng };
+  const distanceKm =
+    fulfillment === 'delivery'
+      ? deliveryDistanceKm(restaurantCoords, input.deliveryCoordinates)
+      : 0;
+
+  const pricing = computeOrderPricing({
+    foodSubtotal: subtotal,
+    discountAmount: couponDiscount,
+    offerType,
+    distanceKm,
+    fulfillment,
+  });
+
+  const discountAmount = pricing.foodDiscountAmount + pricing.deliveryDiscount;
+
+  return {
+    foodDiscountAmount: pricing.foodDiscountAmount,
+    deliveryDiscount: pricing.deliveryDiscount,
+    restaurant,
+    lineItems,
+    subtotal,
+    discountAmount,
+    appliedCode,
+    offerId,
+    pricing,
+    restaurantCoords,
+    fulfillment,
+  };
+}
+
+export async function quoteOrder(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (!req.user) {
+      next(createError(401));
+      return;
+    }
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      next(createError(400, errors.array()[0].msg));
+      return;
+    }
+    const { restaurantId, items, couponCode, deliveryAddress, fulfillment } = req.body as {
+      restaurantId: string;
+      items: OrderLineInput[];
+      couponCode?: string;
+      deliveryAddress: { coordinates: { lat: number; lng: number } };
+      fulfillment?: OrderFulfillment;
+    };
+
+    const prepared = await prepareOrderCheckout({
+      restaurantId,
+      items,
+      userId: req.user.sub,
+      couponCode,
+      deliveryCoordinates: deliveryAddress.coordinates,
+      fulfillment,
+    });
+
+    res.json({
+      customer: formatCustomerQuote(prepared.pricing),
+      couponCode: prepared.appliedCode,
+    });
+  } catch (e) {
+    next(e);
+  }
 }
 
 export async function createOrder(
@@ -70,107 +161,98 @@ export async function createOrder(
       next(createError(400, errors.array()[0].msg));
       return;
     }
-    const { restaurantId, items, deliveryAddress, customerNotes, couponCode } = req.body as {
-      restaurantId: string;
-      items: OrderLineInput[];
-      deliveryAddress: {
-        label: string;
-        line1: string;
-        coordinates: { lat: number; lng: number };
+    const { restaurantId, items, deliveryAddress, customerNotes, couponCode, fulfillment } =
+      req.body as {
+        restaurantId: string;
+        items: OrderLineInput[];
+        deliveryAddress: {
+          label: string;
+          line1: string;
+          coordinates: { lat: number; lng: number };
+        };
+        customerNotes?: string;
+        couponCode?: string;
+        fulfillment?: OrderFulfillment;
       };
-      customerNotes?: string;
-      couponCode?: string;
-    };
 
-    const restaurant = await Restaurant.findById(restaurantId);
-    if (!restaurant || !restaurant.isActive) {
-      next(createError(404, 'Restaurant not found'));
-      return;
-    }
-    if (restaurant.isAcceptingOrders === false) {
-      next(createError(403, 'Restaurant is closed and not accepting orders right now'));
-      return;
-    }
+    const prepared = await prepareOrderCheckout({
+      restaurantId,
+      items,
+      userId: req.user.sub,
+      couponCode,
+      deliveryCoordinates: deliveryAddress.coordinates,
+      fulfillment,
+    });
 
-    const lineItems: {
-      menuItemId: Types.ObjectId;
-      name: string;
-      price: number;
-      quantity: number;
-    }[] = [];
-    let total = 0;
+    const { pricing } = prepared;
+    const payouts = computeOrderPayouts(pricing);
+    const orderNumber = generateOrderNumber();
 
-    for (const line of items) {
-      const mi = await MenuItem.findOne({
-        _id: line.menuItemId,
-        restaurantId: restaurant._id,
-        isAvailable: true,
-      });
-      if (!mi) {
-        next(createError(400, `Invalid menu item: ${line.menuItemId}`));
-        return;
-      }
-      let resolved: { name: string; price: number };
-      try {
-        resolved = resolveOrderLine(mi, line);
-      } catch (e) {
-        next(e);
-        return;
-      }
-      const qty = line.quantity;
-      lineItems.push({
-        menuItemId: mi._id,
-        name: resolved.name,
-        price: resolved.price,
-        quantity: qty,
-      });
-      total += resolved.price * qty;
-    }
-
-    const subtotal = Math.round(total * 100) / 100;
-    let discountAmount = 0;
-    let appliedCode: string | undefined;
-    let offerId: Types.ObjectId | undefined;
-
-    if (couponCode?.trim()) {
-      const cartItemNames = lineItems.map((li) => li.name);
-      const validated = await validateShopOffer({
-        restaurantId: restaurant._id,
-        userId: req.user.sub,
-        subtotal,
-        couponCode,
-        cartItemNames,
-      });
-      discountAmount = validated.discountAmount;
-      appliedCode = validated.code;
-      offerId = new Types.ObjectId(validated.offerId);
-    }
-
-    const orderTotal = Math.max(0, Math.round((subtotal - discountAmount) * 100) / 100);
-
-    const [lng, lat] = restaurant.location.coordinates;
     const order = await FoodOrder.create({
       userId: req.user.sub,
-      restaurantId: restaurant._id,
-      orderNumber: generateOrderNumber(),
-      restaurantName: restaurant.name,
-      restaurantCoords: { lat, lng },
-      items: lineItems,
-      subtotal,
-      discountAmount,
-      couponCode: appliedCode,
-      offerId,
-      total: orderTotal,
-      status: 'placed',
+      restaurantId: prepared.restaurant._id,
+      orderNumber,
+      restaurantName: prepared.restaurant.name,
+      restaurantCoords: prepared.restaurantCoords,
+      items: prepared.lineItems,
+      subtotal: prepared.subtotal,
+      discountAmount: prepared.discountAmount,
+      foodDiscountAmount: prepared.foodDiscountAmount,
+      deliveryDiscount: prepared.deliveryDiscount,
+      couponCode: prepared.appliedCode,
+      offerId: prepared.offerId,
+      total: pricing.customerTotal,
+      fulfillment: pricing.fulfillment,
+      deliveryFee: pricing.deliveryFee,
+      packageFee: pricing.packageFee,
+      gstAmount: pricing.gstAmount,
+      deliveryDistanceKm: pricing.distanceKm,
+      paymentStatus: 'pending',
+      restaurantEarnings: payouts.restaurantEarnings,
+      riderEarnings: payouts.riderEarnings,
+      zygoEarnings: payouts.zygoEarnings,
+      estimatedRiderEarnings: payouts.riderEarnings,
+      status: 'payment_pending',
       deliveryAddress,
       customerNotes: customerNotes?.trim().slice(0, 500) || undefined,
     });
 
-    if (offerId) {
-      await ShopOffer.updateOne({ _id: offerId }, { $inc: { usageCount: 1 } });
+    const { enabled: razorpayEnabled } = getRazorpayConfig();
+    if (!razorpayEnabled) {
+      next(createError(503, 'Online payment is not configured. Contact support.'));
+      return;
     }
 
-    res.status(201).json(formatOrder(order));
+    const rzOrder = await createRazorpayOrder({
+      amountInr: pricing.customerTotal,
+      receipt: order._id.toString(),
+      notes: {
+        orderNumber,
+        restaurantId: prepared.restaurant._id.toString(),
+      },
+    });
+
+    order.razorpayOrderId = rzOrder.id;
+    await order.save();
+
+    const customer = await User.findById(req.user.sub).select('name email phone').lean();
+
+    res.status(201).json({
+      ...formatOrder(order),
+      payment: {
+        keyId: getRazorpayKeyId(),
+        razorpayOrderId: rzOrder.id,
+        amount: toPaise(pricing.customerTotal),
+        currency: 'INR',
+        name: 'Zygo',
+        description: `Food order ${orderNumber}`,
+        prefill: {
+          name: customer?.name ?? '',
+          email: customer?.email ?? '',
+          contact: customer?.phone ?? '',
+        },
+      },
+    });
   } catch (e) {
     next(e);
   }
@@ -271,6 +353,49 @@ export async function getOrderRiderContact(
   }
 }
 
+export async function verifyOrderPayment(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (!req.user) {
+      next(createError(401));
+      return;
+    }
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body as {
+      razorpay_order_id: string;
+      razorpay_payment_id: string;
+      razorpay_signature: string;
+    };
+
+    const order = await FoodOrder.findOne({
+      razorpayOrderId: razorpay_order_id,
+      userId: req.user.sub,
+    });
+    if (!order) {
+      next(createError(404, 'Order not found for this payment'));
+      return;
+    }
+
+    await assertOrderPayableByUser(order._id.toString(), req.user.sub);
+
+    if (
+      !verifyPaymentSignature(razorpay_order_id, razorpay_payment_id, razorpay_signature)
+    ) {
+      order.paymentStatus = 'failed';
+      await order.save();
+      next(createError(400, 'Payment verification failed'));
+      return;
+    }
+
+    const paid = await markFoodOrderPaid(order._id.toString(), razorpay_payment_id);
+    res.json(formatOrder(paid!));
+  } catch (e) {
+    next(e);
+  }
+}
+
 export async function cancelOrder(
   req: AuthedRequest,
   res: Response,
@@ -289,13 +414,17 @@ export async function cancelOrder(
       next(createError(404));
       return;
     }
-    if (order.status !== 'placed') {
-      next(createError(400, 'Only placed orders can be cancelled'));
+    if (order.status !== 'placed' && order.status !== 'payment_pending') {
+      next(createError(400, 'This order can no longer be cancelled'));
       return;
     }
     order.status = 'cancelled';
+    order.acceptExpiresAt = null;
     await order.save();
-    res.json(formatOrder(order));
+    clearRestaurantAcceptTimeout(order._id.toString());
+    await refundPaidFoodOrder(order._id.toString());
+    const fresh = await FoodOrder.findById(order._id);
+    res.json(formatOrder(fresh ?? order));
   } catch (e) {
     next(e);
   }
@@ -346,7 +475,30 @@ function formatOrder(doc: InstanceType<typeof FoodOrder>) {
     discountAmount: o.discountAmount ?? 0,
     couponCode: o.couponCode,
     total: o.total,
+    paymentStatus: o.paymentStatus ?? 'paid',
+    refundedAt: o.refundedAt ?? null,
+    fulfillment: o.fulfillment ?? 'delivery',
+    deliveryFee: o.deliveryFee ?? 0,
+    packageFee: o.packageFee ?? 0,
+    gstAmount: o.gstAmount ?? 0,
+    deliveryDistanceKm: o.deliveryDistanceKm,
+    foodDiscountAmount: o.foodDiscountAmount ?? 0,
+    deliveryDiscount: o.deliveryDiscount ?? 0,
+    pricing: formatCustomerQuoteFromOrder({
+      subtotal: o.subtotal ?? o.total,
+      foodDiscountAmount: o.foodDiscountAmount,
+      deliveryDiscount: o.deliveryDiscount,
+      discountAmount: o.discountAmount,
+      deliveryFee: o.deliveryFee,
+      packageFee: o.packageFee,
+      gstAmount: o.gstAmount,
+      deliveryDistanceKm: o.deliveryDistanceKm,
+      total: o.total,
+      fulfillment: o.fulfillment,
+    }),
     status: o.status,
+    rejectReason: o.rejectReason,
+    acceptExpiresAt: o.acceptExpiresAt ?? null,
     deliveryAddress: o.deliveryAddress,
     customerNotes: o.customerNotes,
     estimatedPrepMinutes: o.estimatedPrepMinutes,
@@ -376,7 +528,30 @@ function formatOrderLean(o: Record<string, unknown>) {
     discountAmount: (o.discountAmount as number | undefined) ?? 0,
     couponCode: o.couponCode as string | undefined,
     total,
+    paymentStatus: (o.paymentStatus as string | undefined) ?? 'paid',
+    refundedAt: (o.refundedAt as Date | null | undefined) ?? null,
+    fulfillment: (o.fulfillment as string | undefined) ?? 'delivery',
+    deliveryFee: (o.deliveryFee as number | undefined) ?? 0,
+    packageFee: (o.packageFee as number | undefined) ?? 0,
+    gstAmount: (o.gstAmount as number | undefined) ?? 0,
+    deliveryDistanceKm: o.deliveryDistanceKm as number | undefined,
+    foodDiscountAmount: (o.foodDiscountAmount as number | undefined) ?? 0,
+    deliveryDiscount: (o.deliveryDiscount as number | undefined) ?? 0,
+    pricing: formatCustomerQuoteFromOrder({
+      subtotal: (o.subtotal as number | undefined) ?? total,
+      foodDiscountAmount: o.foodDiscountAmount as number | undefined,
+      deliveryDiscount: o.deliveryDiscount as number | undefined,
+      discountAmount: o.discountAmount as number | undefined,
+      deliveryFee: o.deliveryFee as number | undefined,
+      packageFee: o.packageFee as number | undefined,
+      gstAmount: o.gstAmount as number | undefined,
+      deliveryDistanceKm: o.deliveryDistanceKm as number | undefined,
+      total,
+      fulfillment: (o.fulfillment as OrderFulfillment | undefined) ?? 'delivery',
+    }),
     status: o.status,
+    rejectReason: o.rejectReason as string | undefined,
+    acceptExpiresAt: (o.acceptExpiresAt as Date | null | undefined) ?? null,
     deliveryAddress: o.deliveryAddress,
     customerNotes: o.customerNotes,
     estimatedPrepMinutes: o.estimatedPrepMinutes,

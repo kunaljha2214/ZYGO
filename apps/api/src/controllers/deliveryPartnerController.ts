@@ -7,6 +7,7 @@ import { FoodOrder, type DeliveryPartnerStatus } from '../models/FoodOrder';
 import { DeliveryPartnerProfile } from '../models/DeliveryPartnerProfile';
 import { DeliveryEarning } from '../models/DeliveryEarning';
 import { Restaurant } from '../models/Restaurant';
+import { settleFoodOrderOnDelivered } from '../services/orderSettlement';
 import {
   acceptDeliveryRequest,
   getPendingRequestForPartner,
@@ -149,6 +150,12 @@ export async function setOnlineStatus(req: AuthedRequest, res: Response, next: N
       return;
     }
     const online = Boolean(req.body.online);
+    if (online) {
+      const { assertPartnerSubscriptionActive } = await import(
+        '../services/partnerSubscription'
+      );
+      await assertPartnerSubscriptionActive(req.user!.sub, 'delivery_partner');
+    }
     const updates: Record<string, unknown> = { isDeliveryOnline: online };
     if (online) {
       const existing = await User.findById(req.user!.sub).lean();
@@ -266,26 +273,7 @@ export async function advanceDeliveryStatus(
     if (target === 'delivered') {
       order.deliveredAt = new Date();
       order.status = 'delivered';
-      const earnings = order.estimatedRiderEarnings ?? 35;
-      await DeliveryEarning.create({
-        partnerId: order.deliveryPartnerId!,
-        orderId: order._id,
-        orderNumber: order.orderNumber,
-        amount: earnings,
-        type: 'delivery',
-        status: 'pending',
-      });
-      const profile = await DeliveryPartnerProfile.findOne({ partnerId: req.user!.sub });
-      if (profile) {
-        profile.walletPending += earnings;
-        profile.walletTotalEarned += earnings;
-        profile.totalDeliveries += 1;
-        await profile.save();
-      }
-      await User.findByIdAndUpdate(req.user!.sub, {
-        isDeliveryBusy: false,
-        activeDeliveryOrderId: null,
-      });
+      await settleFoodOrderOnDelivered(order);
     }
 
     await order.save();

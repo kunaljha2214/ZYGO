@@ -13,6 +13,7 @@ export type HomeStackParamList = {
   RestaurantDetail: { id: string; title?: string };
   Cart: undefined;
   Checkout: undefined;
+  CheckoutCoupons: undefined;
   OrderTrack: { orderId: string };
   RidePlan: undefined;
   RideFare: { pickup: Place; drop: Place };
@@ -68,6 +69,7 @@ export type DeliveryPartnerStackParamList = {
   DeliveryWallet: undefined;
   DeliveryHistory: undefined;
   ReferAndEarn: undefined;
+  PartnerSubscription: undefined;
   ProfileDetails: undefined;
 };
 
@@ -84,6 +86,7 @@ export type DriverPartnerStackParamList = {
   DriverWallet: undefined;
   DriverHistory: undefined;
   ReferAndEarn: undefined;
+  PartnerSubscription: undefined;
   ProfileDetails: undefined;
 };
 

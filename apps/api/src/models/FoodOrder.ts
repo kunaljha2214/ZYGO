@@ -1,6 +1,14 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
 
+export type FoodOrderPaymentStatus =
+  | 'pending'
+  | 'paid'
+  | 'failed'
+  | 'refunded'
+  | 'refund_failed';
+
 export type FoodOrderStatus =
+  | 'payment_pending'
   | 'placed'
   | 'confirmed'
   | 'preparing'
@@ -22,6 +30,8 @@ export type DeliveryPartnerStatus =
 
 export type DeliveryAssignmentState = 'none' | 'dispatching' | 'assigned' | 'failed';
 
+export type OrderFulfillment = 'delivery' | 'pickup';
+
 export interface IFoodOrderItem {
   menuItemId: Types.ObjectId;
   name: string;
@@ -42,9 +52,27 @@ export interface IFoodOrder extends Document {
   items: IFoodOrderItem[];
   subtotal: number;
   discountAmount: number;
+  foodDiscountAmount: number;
+  deliveryDiscount: number;
   couponCode?: string;
   offerId?: Types.ObjectId;
   total: number;
+  fulfillment: OrderFulfillment;
+  deliveryFee: number;
+  packageFee: number;
+  gstAmount: number;
+  deliveryDistanceKm?: number;
+  paymentStatus: FoodOrderPaymentStatus;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  razorpayRefundId?: string;
+  paidAt?: Date;
+  refundedAt?: Date;
+  restaurantEarnings: number;
+  riderEarnings: number;
+  zygoEarnings: number;
+  offerUsageCounted: boolean;
+  settlementCompletedAt?: Date;
   status: FoodOrderStatus;
   deliveryAddress: IDeliveryAddress;
   customerNotes?: string;
@@ -65,6 +93,8 @@ export interface IFoodOrder extends Document {
   rejectedPartnerIds: Types.ObjectId[];
   pendingPartnerId?: Types.ObjectId | null;
   dispatchExpiresAt?: Date | null;
+  /** Auto-cancel if restaurant does not accept by this time. */
+  acceptExpiresAt?: Date | null;
   estimatedRiderEarnings?: number;
   restaurantName?: string;
   restaurantCoords?: { lat: number; lng: number };
@@ -106,12 +136,39 @@ const FoodOrderSchema = new Schema<IFoodOrder>(
     items: [FoodOrderItemSchema],
     subtotal: { type: Number, required: true, min: 0 },
     discountAmount: { type: Number, default: 0, min: 0 },
+    foodDiscountAmount: { type: Number, default: 0, min: 0 },
+    deliveryDiscount: { type: Number, default: 0, min: 0 },
     couponCode: { type: String, trim: true, uppercase: true },
     offerId: { type: Schema.Types.ObjectId, ref: 'ShopOffer' },
     total: { type: Number, required: true },
+    fulfillment: {
+      type: String,
+      enum: ['delivery', 'pickup'],
+      default: 'delivery',
+    },
+    deliveryFee: { type: Number, default: 0, min: 0 },
+    packageFee: { type: Number, default: 0, min: 0 },
+    gstAmount: { type: Number, default: 0, min: 0 },
+    deliveryDistanceKm: { type: Number, min: 0 },
+    paymentStatus: {
+      type: String,
+      enum: ['pending', 'paid', 'failed', 'refunded', 'refund_failed'],
+      default: 'pending',
+    },
+    razorpayOrderId: { type: String, index: true, sparse: true },
+    razorpayPaymentId: { type: String, sparse: true },
+    razorpayRefundId: { type: String, sparse: true },
+    paidAt: { type: Date },
+    refundedAt: { type: Date },
+    restaurantEarnings: { type: Number, default: 0, min: 0 },
+    riderEarnings: { type: Number, default: 0, min: 0 },
+    zygoEarnings: { type: Number, default: 0, min: 0 },
+    offerUsageCounted: { type: Boolean, default: false },
+    settlementCompletedAt: { type: Date },
     status: {
       type: String,
       enum: [
+        'payment_pending',
         'placed',
         'confirmed',
         'preparing',
@@ -145,6 +202,7 @@ const FoodOrderSchema = new Schema<IFoodOrder>(
     rejectedPartnerIds: [{ type: Schema.Types.ObjectId, ref: 'User' }],
     pendingPartnerId: { type: Schema.Types.ObjectId, ref: 'User', default: null },
     dispatchExpiresAt: { type: Date, default: null },
+    acceptExpiresAt: { type: Date, default: null, index: true },
     estimatedRiderEarnings: { type: Number, min: 0 },
     restaurantName: { type: String, maxlength: 120 },
     restaurantCoords: {

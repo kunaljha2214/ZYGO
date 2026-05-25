@@ -39,6 +39,12 @@ export interface IRideBooking extends Document {
   estimatedDriverEarnings?: number | null;
   driverLastLocation?: { lat: number; lng: number } | null;
   customerRating?: number | null;
+  paymentStatus: 'pending' | 'paid' | 'failed';
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  paidAt?: Date;
+  /** Captain wallet credited after customer pays. */
+  driverEarningsSettled: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -97,6 +103,15 @@ const RideBookingSchema = new Schema<IRideBooking>(
       lng: { type: Number },
     },
     customerRating: { type: Number, min: 1, max: 5, default: null },
+    paymentStatus: {
+      type: String,
+      enum: ['pending', 'paid', 'failed'],
+      default: 'pending',
+    },
+    razorpayOrderId: { type: String, index: true, sparse: true },
+    razorpayPaymentId: { type: String, sparse: true },
+    paidAt: { type: Date },
+    driverEarningsSettled: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

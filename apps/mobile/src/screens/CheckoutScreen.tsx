@@ -5,15 +5,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { HomeStackProps } from '../navigation/types';
 import { Button } from '../components/Button';
 import { AppTextInput } from '../components/AppTextInput';
+import { OfferCouponCard } from '../components/food/OfferCouponCard';
 import { LocationSearchField } from '../components/rides/LocationSearchField';
 import { LocationPickerModal } from '../components/rides/LocationPickerModal';
-import { api } from '../api/client';
+import { fetchOrderQuote, createFoodOrder, verifyOrderPayment, type CustomerPriceBreakdown } from '../api/orders';
+import { openRazorpayCheckout } from '../services/razorpayCheckout';
+import { OrderPriceBreakdown } from '../components/food/OrderPriceBreakdown';
 import { useCartStore } from '../store/cartStore';
 import { useFoodDeliveryLocationStore } from '../store/foodDeliveryLocationStore';
-import {
-  fetchRestaurantOffers,
-  validateRestaurantCoupon,
-  type ValidatedCoupon} from '../api/customerOffers';
+import { fetchRestaurantOffers } from '../api/customerOffers';
 import { reverseGeocode, type GeocodedPlace } from '../services/geocoding';
 import { isFiniteCoord } from '../components/rides/mapTypes';
 import {
@@ -33,6 +33,9 @@ export function CheckoutScreen({ navigation }: Props) {
   const items = useCartStore((s) => s.items);
   const restaurantId = useCartStore((s) => s.restaurantId);
   const restaurantName = useCartStore((s) => s.restaurantName);
+  const customerNotes = useCartStore((s) => s.customerNotes);
+  const applied = useCartStore((s) => s.appliedCoupon);
+  const setAppliedCoupon = useCartStore((s) => s.setAppliedCoupon);
   const clear = useCartStore((s) => s.clear);
   const foodDeliveryLoc = useFoodDeliveryLocationStore((s) => s.selected);
 
@@ -41,24 +44,54 @@ export function CheckoutScreen({ navigation }: Props) {
   const [deliveryCoords, setDeliveryCoords] = useState<{ lat: number; lng: number } | null>(
     null
   );
-  const [deliveryFieldKey, setDeliveryFieldKey] = useState(0);
   const [deliveryErr, setDeliveryErr] = useState<string | null>(null);
   const [locatingDelivery, setLocatingDelivery] = useState(true);
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
-  const [couponInput, setCouponInput] = useState('');
-  const [applied, setApplied] = useState<ValidatedCoupon | null>(null);
-  const [couponError, setCouponError] = useState<string | null>(null);
-  const [applying, setApplying] = useState(false);
 
   const subtotal = useMemo(
     () => items.reduce((sum, i) => sum + i.price * i.quantity, 0),
     [items]
   );
 
-  const cartItemNames = useMemo(() => items.map((i) => i.name), [items]);
+  const quotePayload = useMemo(() => {
+    if (!restaurantId || !deliveryCoords || !isFiniteCoord(deliveryCoords)) return null;
+    return {
+      restaurantId,
+      items: items.map((i) => ({
+        menuItemId: i.menuItemId,
+        quantity: i.quantity,
+        ...(i.variantName ? { variantName: i.variantName } : {}),
+        ...(i.addOnNames?.length ? { addOnNames: i.addOnNames } : {}),
+      })),
+      deliveryAddress: { coordinates: deliveryCoords },
+      ...(applied?.code ? { couponCode: applied.code } : {}),
+      fulfillment: 'delivery' as const,
+    };
+  }, [restaurantId, items, deliveryCoords, applied?.code]);
 
-  const discount = applied?.discountAmount ?? 0;
-  const total = applied ? applied.finalTotal : subtotal;
+  const { data: quote, isLoading: quoteLoading } = useQuery({
+    queryKey: ['order-quote', quotePayload],
+    queryFn: () => fetchOrderQuote(quotePayload!),
+    enabled: Boolean(quotePayload),
+  });
+
+  const fallbackBreakdown: CustomerPriceBreakdown = {
+    food: subtotal,
+    foodDiscount: 0,
+    deliveryFee: 0,
+    deliveryDiscount: 0,
+    packageFee: 0,
+    packageFeePercent: 5,
+    gstAmount: 0,
+    gstPercent: 5,
+    distanceKm: 0,
+    toPay: subtotal,
+    fulfillment: 'delivery',
+    tagline: 'Set your delivery address to see the full bill.',
+  };
+
+  const breakdown = quote?.customer ?? fallbackBreakdown;
+  const toPay = breakdown.toPay;
 
   const applyDelivery = useCallback((place: GeocodedPlace) => {
     if (!isFiniteCoord(place.coordinates)) {
@@ -67,7 +100,6 @@ export function CheckoutScreen({ navigation }: Props) {
     }
     setDeliveryCoords(place.coordinates);
     setLine1(place.line1);
-    setDeliveryFieldKey((k) => k + 1);
     setDeliveryErr(null);
   }, []);
 
@@ -75,11 +107,9 @@ export function CheckoutScreen({ navigation }: Props) {
     let cancelled = false;
     void (async () => {
       setLocatingDelivery(true);
-      setLine1('Detecting your location…');
       const permission = await ensureLocationPermission();
       if (permission !== 'granted') {
         if (!cancelled) {
-          setLine1('');
           setLocatingDelivery(false);
         }
         return;
@@ -105,37 +135,16 @@ export function CheckoutScreen({ navigation }: Props) {
   const { data: offers = [], isLoading: offersLoading } = useQuery({
     queryKey: ['restaurant-offers', restaurantId],
     queryFn: () => fetchRestaurantOffers(restaurantId!),
-    enabled: Boolean(restaurantId)});
+    enabled: Boolean(restaurantId),
+  });
 
-  const applyCoupon = async (code: string) => {
-    if (!restaurantId) return;
-    const trimmed = code.trim().toUpperCase();
-    if (!trimmed) {
-      setCouponError('Enter a coupon code');
-      return;
+  const previewOffer = useMemo(() => {
+    if (offers.length === 0) return null;
+    if (applied) {
+      return offers.find((o) => o.code === applied.code) ?? offers[0];
     }
-    setApplying(true);
-    setCouponError(null);
-    try {
-      const result = await validateRestaurantCoupon(restaurantId, {
-        code: trimmed,
-        subtotal,
-        cartItemNames});
-      setApplied(result);
-      setCouponInput(result.code);
-    } catch (e) {
-      setApplied(null);
-      setCouponError(e instanceof Error ? e.message : 'Could not apply coupon');
-    } finally {
-      setApplying(false);
-    }
-  };
-
-  const removeCoupon = () => {
-    setApplied(null);
-    setCouponInput('');
-    setCouponError(null);
-  };
+    return offers[0];
+  }, [offers, applied]);
 
   const placeOrder = () => {
     if (!deliveryCoords || !isFiniteCoord(deliveryCoords) || !line1.trim()) {
@@ -151,25 +160,42 @@ export function CheckoutScreen({ navigation }: Props) {
       if (!deliveryCoords || !isFiniteCoord(deliveryCoords)) {
         throw new Error('Delivery location is required');
       }
-      const { data } = await api.post<{ id: string }>('/orders', {
+      const order = await createFoodOrder({
         restaurantId,
         items: items.map((i) => ({
           menuItemId: i.menuItemId,
           quantity: i.quantity,
           ...(i.variantName ? { variantName: i.variantName } : {}),
-          ...(i.addOnNames?.length ? { addOnNames: i.addOnNames } : {})})),
+          ...(i.addOnNames?.length ? { addOnNames: i.addOnNames } : {}),
+        })),
         ...(applied?.code ? { couponCode: applied.code } : {}),
+        ...(customerNotes.trim() ? { customerNotes: customerNotes.trim() } : {}),
         deliveryAddress: {
           label: label.trim() || 'Delivery',
           line1: line1.trim(),
-          coordinates: deliveryCoords}});
-      return data;
+          coordinates: deliveryCoords,
+        },
+        fulfillment: 'delivery',
+      });
+
+      try {
+        const paymentResult = await openRazorpayCheckout(order.payment);
+        await verifyOrderPayment(paymentResult);
+      } catch (payErr: unknown) {
+        const code = (payErr as { code?: number })?.code;
+        if (code === 0) {
+          throw new Error('Payment cancelled. Your order is saved — pay from order details when ready.');
+        }
+        throw payErr;
+      }
+      return order;
     },
     onSuccess: (data) => {
       clear();
       void qc.invalidateQueries({ queryKey: ['orders'] });
       navigation.replace('OrderTrack', { orderId: data.id });
-    }});
+    },
+  });
 
   return (
     <StackScroll keyboardShouldPersistTaps="handled">
@@ -177,119 +203,78 @@ export function CheckoutScreen({ navigation }: Props) {
         <Text style={styles.shopName}>{restaurantName}</Text>
       ) : null}
 
-      <View style={styles.summaryCard}>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Item total</Text>
-          <Text style={styles.summaryValue}>₹{subtotal.toFixed(2)}</Text>
-        </View>
-        {applied ? (
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>
-              Discount ({applied.code})
-            </Text>
-            <Text style={styles.discountValue}>−₹{discount.toFixed(2)}</Text>
-          </View>
-        ) : null}
-        <View style={[styles.summaryRow, styles.summaryTotal]}>
-          <Text style={styles.totalLabel}>To pay</Text>
-          <Text style={styles.totalValue}>₹{total.toFixed(2)}</Text>
-        </View>
-      </View>
+      <OrderPriceBreakdown
+        breakdown={breakdown}
+        loading={quoteLoading && Boolean(quotePayload)}
+        couponCode={applied?.code ?? quote?.couponCode}
+      />
 
       <Text style={shared.label}>Coupons & offers</Text>
       {offersLoading ? (
         <ActivityIndicator color={colors.primary} style={{ marginVertical: 12 }} />
-      ) : offers.length === 0 ? (
+      ) : !previewOffer ? (
         <Text style={styles.emptyOffers}>No active offers for this restaurant right now.</Text>
       ) : (
-        <View style={styles.offerList}>
-          {offers.map((o) => {
-            const selected = applied?.code === o.code;
-            return (
-              <Pressable
-                key={o.id}
-                style={[styles.offerCard, selected && styles.offerCardOn]}
-                onPress={() => void applyCoupon(o.code)}
-                disabled={applying}
-              >
-                <Text style={styles.offerCode}>{o.code}</Text>
-                <Text style={styles.offerTitle}>{o.title}</Text>
-                <Text style={styles.offerMeta}>
-                  {o.summary}
-                  {o.minOrderAmount > 0 ? ` · min ₹${o.minOrderAmount}` : ''}
-                </Text>
-                {o.offerType === 'combo' && o.comboItemNames && o.comboItemNames.length > 0 ? (
-                  <Text style={styles.offerHint}>
-                    Add to cart: {o.comboItemNames.join(' + ')}
-                  </Text>
-                ) : null}
-                {o.campaignType === 'happy_hour' && o.happyHourStart ? (
-                  <Text style={styles.offerHint}>
-                    Happy hour {o.happyHourStart}–{o.happyHourEnd}
-                  </Text>
-                ) : null}
-              </Pressable>
-            );
-          })}
+        <View style={styles.offerPreview}>
+          <OfferCouponCard
+            offer={previewOffer}
+            selected={applied?.code === previewOffer.code}
+            onPress={() => navigation.navigate('CheckoutCoupons')}
+          />
+          {offers.length > 1 ? (
+            <Pressable
+              style={styles.viewAllLink}
+              onPress={() => navigation.navigate('CheckoutCoupons')}
+            >
+              <Text style={styles.viewAllText}>
+                View all {offers.length} coupons
+              </Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              style={styles.viewAllLink}
+              onPress={() => navigation.navigate('CheckoutCoupons')}
+            >
+              <Text style={styles.viewAllText}>Browse coupons & apply code</Text>
+            </Pressable>
+          )}
+          {applied ? (
+            <Pressable onPress={() => setAppliedCoupon(null)}>
+              <Text style={styles.removeCoupon}>Remove coupon</Text>
+            </Pressable>
+          ) : null}
         </View>
       )}
 
-      <Text style={shared.label}>Have a code?</Text>
-      <View style={styles.couponRow}>
-        <AppTextInput
-          style={styles.couponInput}
-          value={couponInput}
-          onChangeText={(t) => {
-            setCouponInput(t.toUpperCase());
-            if (applied) setApplied(null);
-            setCouponError(null);
-          }}
-          placeholder="Enter coupon code"
-          autoCapitalize="characters"
-        />
-        <Pressable
-          style={[styles.applyBtn, applying && styles.applyBtnDisabled]}
-          onPress={() => void applyCoupon(couponInput)}
-          disabled={applying}
-        >
-          {applying ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <Text style={styles.applyBtnText}>Apply</Text>
-          )}
-        </Pressable>
-      </View>
-
-      {couponError ? <Text style={shared.err}>{couponError}</Text> : null}
-      {applied ? (
-        <Pressable onPress={removeCoupon}>
-          <Text style={styles.removeCoupon}>Remove coupon</Text>
-        </Pressable>
+      {customerNotes.trim() ? (
+        <>
+          <Text style={shared.label}>Cooking request</Text>
+          <Text style={styles.cookingNote}>{customerNotes.trim()}</Text>
+        </>
       ) : null}
 
-      <Text style={[shared.label, { marginTop: 16 }]}>Delivery location</Text>
-      <Text style={shared.hint}>
-        Search or pick on the map like ride drop. Coordinates are saved automatically.
-      </Text>
+      <Text style={[shared.label, { marginTop: 16 }]}>Delivery address</Text>
+      <Text style={shared.hint}>Search your address or pick a point on the map.</Text>
 
-      <View style={styles.deliveryBox}>
+      <View style={styles.deliveryFieldWrap}>
         {locatingDelivery ? (
           <ActivityIndicator color={colors.primary} size="small" style={styles.deliverySpinner} />
         ) : null}
-        <Text style={styles.deliveryLine} numberOfLines={4}>
-          {line1 || 'Search or choose delivery location on the map'}
-        </Text>
+        <View style={styles.deliveryField}>
+          <LocationSearchField
+            label=""
+            value={line1}
+            placeholder={
+              locatingDelivery
+                ? 'Detecting your location…'
+                : 'Search area, street, landmark (e.g. MG Road)'
+            }
+            onSelect={applyDelivery}
+          />
+        </View>
       </View>
-
-      <LocationSearchField
-        key={`delivery-${deliveryFieldKey}`}
-        label="Search delivery address"
-        value={line1}
-        placeholder="Search area, street, landmark (e.g. MG Road)"
-        onSelect={applyDelivery}
-      />
       <Button
-        title="Choose delivery location on map"
+        title="Choose on map"
         variant="ghost"
         onPress={() => setMapPickerOpen(true)}
       />
@@ -306,10 +291,14 @@ export function CheckoutScreen({ navigation }: Props) {
       ) : null}
 
       <Button
-        title={`Place order (COD) · ₹${total.toFixed(2)}`}
+        title={
+          quoteLoading && quotePayload
+            ? 'Opening payment…'
+            : `Pay ₹${toPay.toFixed(2)}`
+        }
         onPress={placeOrder}
         loading={mutation.isPending}
-        disabled={items.length === 0}
+        disabled={items.length === 0 || (Boolean(quotePayload) && quoteLoading)}
       />
 
       {mapPickerOpen ? (
@@ -332,61 +321,27 @@ export function CheckoutScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   shopName: { fontSize: 18, fontWeight: '800', color: colors.text, marginBottom: 8 },
-  summaryCard: {
-    backgroundColor: colors.card,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.cardBorder,
-    padding: 14,
-    marginBottom: 8,
-    gap: 8},
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  summaryLabel: { color: colors.textSecondary },
-  summaryValue: { color: colors.text, fontWeight: '600' },
-  discountValue: { color: '#4ade80', fontWeight: '700' },
-  summaryTotal: {
-    marginTop: 4,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: colors.cardBorder},
-  totalLabel: { color: colors.text, fontWeight: '800', fontSize: 16 },
-  totalValue: { color: colors.primary, fontWeight: '800', fontSize: 18 },
   emptyOffers: { color: colors.textMuted, fontSize: 13, marginBottom: 8 },
-  offerList: { gap: 8, marginBottom: 12 },
-  offerCard: {
+  offerPreview: { gap: 8, marginBottom: 12 },
+  viewAllLink: { alignSelf: 'flex-start', paddingVertical: 4 },
+  viewAllText: { color: colors.primaryBright, fontWeight: '700', fontSize: 14 },
+  removeCoupon: { color: colors.lavender, fontWeight: '600' },
+  cookingNote: {
+    color: colors.textSecondary,
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 4,
     backgroundColor: colors.surface,
     borderRadius: radii.md,
     padding: 12,
     borderWidth: 1,
-    borderColor: colors.chipBorder},
-  offerCardOn: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
-  offerCode: { color: colors.primaryBright, fontWeight: '900', fontSize: 15 },
-  offerTitle: { color: colors.text, fontWeight: '700', marginTop: 4 },
-  offerMeta: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
-  offerHint: { color: colors.lavender, fontSize: 11, marginTop: 4 },
-  couponRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  couponInput: { flex: 1, marginBottom: 0 },
-  applyBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: radii.md,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    minWidth: 72,
-    alignItems: 'center'},
-  applyBtnDisabled: { opacity: 0.6 },
-  applyBtnText: { color: '#fff', fontWeight: '800' },
-  removeCoupon: { color: colors.lavender, fontWeight: '600', marginBottom: 8 },
-  deliveryBox: {
-    backgroundColor: colors.inputBg,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.inputBorder,
-    padding: 14,
-    marginBottom: 8,
-    minHeight: 52,
-    flexDirection: 'row',
-    alignItems: 'center',
+    borderColor: colors.chipBorder,
   },
-  deliverySpinner: { marginRight: 10 },
-  deliveryLine: { flex: 1, color: colors.text, fontSize: 16, lineHeight: 22 },
+  deliveryFieldWrap: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 4,
+  },
+  deliverySpinner: { marginTop: 14, marginRight: 10 },
+  deliveryField: { flex: 1 },
 });

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Alert } from 'react-native';
 import { StackScroll } from '../components/layout/StackScroll';
 import { useRoute, type RouteProp } from '@react-navigation/native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -17,6 +17,8 @@ import {
 } from '../services/rideSocket';
 import { TripContactCard } from '../components/trip/TripContactCard';
 import { callRideCaptain } from '../utils/placePeerCall';
+import { checkoutRidePayment, verifyRidePayment } from '../api/rides';
+import { openRazorpayCheckout } from '../services/razorpayCheckout';
 import { shared } from '../theme/styles';
 import { colors } from '../theme';
 
@@ -30,6 +32,7 @@ type Ride = {
   distanceKm?: number;
   durationMin?: number;
   status: string;
+  paymentStatus?: string;
   driverLastLocation?: { lat: number; lng: number } | null;
   captain?: { id: string; name: string } | null;
 };
@@ -92,6 +95,21 @@ export function RideTrackScreen() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['ride', rideId] }),
   });
 
+  const payMut = useMutation({
+    mutationFn: async () => {
+      const checkout = await checkoutRidePayment(rideId);
+      const paymentResult = await openRazorpayCheckout(checkout.payment);
+      await verifyRidePayment(paymentResult);
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['ride', rideId] }),
+    onError: (err: unknown) => {
+      const code = (err as { code?: number })?.code;
+      if (code === 0) return;
+      const msg = err instanceof Error ? err.message : 'Payment failed';
+      Alert.alert('Payment', msg);
+    },
+  });
+
   if (isLoading || !data) {
     return (
       <View style={shared.center}>
@@ -114,6 +132,9 @@ export function RideTrackScreen() {
     data.status !== 'in_progress' &&
     data.status !== 'completed';
   const cancellable = data.status !== 'in_progress' && data.status !== 'completed';
+  const paymentPending =
+    data.status === 'completed' && data.paymentStatus !== 'paid';
+  const paymentDone = data.status === 'completed' && data.paymentStatus === 'paid';
 
   return (
     <StackScroll nestedScrollEnabled scrollEnabled={!mapGestureActive}>
@@ -175,6 +196,16 @@ export function RideTrackScreen() {
         <Text style={shared.h}>Drop</Text>
         <Text style={shared.line}>{data.drop.line1}</Text>
       </Card>
+      {paymentPending ? (
+        <Button
+          title={`Pay ₹${data.fare.toFixed(0)}`}
+          onPress={() => payMut.mutate()}
+          loading={payMut.isPending}
+        />
+      ) : null}
+      {paymentDone ? (
+        <Text style={styles.paidNote}>Fare paid · thank you for riding with Zygo</Text>
+      ) : null}
       {cancellable && data.status !== 'cancelled' ? (
         <Button
           title="Cancel ride"
@@ -190,6 +221,12 @@ export function RideTrackScreen() {
 const mapH = Math.min(280, Dimensions.get('window').height * 0.36);
 
 const styles = StyleSheet.create({
+  paidNote: {
+    color: colors.primaryBright,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginVertical: 12,
+  },
   eta: { color: colors.primaryBright, fontWeight: '700', marginBottom: 8 },
   mapWrap: {
     height: mapH,

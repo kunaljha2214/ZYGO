@@ -6,6 +6,7 @@ import { RestaurantListScreen } from '../screens/RestaurantListScreen';
 import { RestaurantDetailScreen } from '../screens/RestaurantDetailScreen';
 import { CartScreen } from '../screens/CartScreen';
 import { CheckoutScreen } from '../screens/CheckoutScreen';
+import { CheckoutCouponsScreen } from '../screens/CheckoutCouponsScreen';
 import { OrderTrackScreen } from '../screens/OrderTrackScreen';
 import { RidePlanScreen } from '../screens/RidePlanScreen';
 import { RideFareScreen } from '../screens/RideFareScreen';
@@ -22,6 +23,11 @@ export function HomeStackNav() {
       <Stack.Screen name="RestaurantDetail" component={RestaurantDetailScreen} options={{ title: 'Menu' }} />
       <Stack.Screen name="Cart" component={CartScreen} options={{ title: 'Cart' }} />
       <Stack.Screen name="Checkout" component={CheckoutScreen} options={{ title: 'Checkout' }} />
+      <Stack.Screen
+        name="CheckoutCoupons"
+        component={CheckoutCouponsScreen}
+        options={{ title: 'Coupons & offers' }}
+      />
       <Stack.Screen name="OrderTrack" component={OrderTrackScreen} options={{ title: 'Order' }} />
       <Stack.Screen name="RidePlan" component={RidePlanScreen} options={{ title: 'Book ride' }} />
       <Stack.Screen name="RideFare" component={RideFareScreen} options={{ title: 'Fare' }} />

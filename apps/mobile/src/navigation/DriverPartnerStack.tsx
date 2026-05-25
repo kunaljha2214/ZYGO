@@ -10,6 +10,7 @@ import { DriverEarningsScreen } from '../screens/driver/DriverEarningsScreen';
 import { DriverWalletScreen } from '../screens/driver/DriverWalletScreen';
 import { DriverHistoryScreen } from '../screens/driver/DriverHistoryScreen';
 import { ReferAndEarnScreen } from '../screens/profile/ReferAndEarnScreen';
+import { PartnerSubscriptionScreen } from '../screens/profile/PartnerSubscriptionScreen';
 import { ProfileDetailsScreen } from '../screens/profile/ProfileDetailsScreen';
 import { DriverActiveScreen } from '../screens/driver/DriverActiveScreen';
 import { DriverRequestModal } from '../components/driver/DriverRequestModal';
@@ -121,6 +122,11 @@ export function DriverPartnerStack() {
         <Stack.Screen name="DriverWallet" component={DriverWalletScreen} options={{ title: 'Wallet' }} />
         <Stack.Screen name="DriverHistory" component={DriverHistoryScreen} options={{ title: 'Ride history' }} />
         <Stack.Screen name="ReferAndEarn" component={ReferAndEarnScreen} options={{ title: 'Refer & earn' }} />
+        <Stack.Screen
+          name="PartnerSubscription"
+          component={PartnerSubscriptionScreen}
+          options={{ title: 'Subscription' }}
+        />
         <Stack.Screen name="ProfileDetails" component={ProfileDetailsScreen} options={{ title: 'Profile' }} />
       </Stack.Navigator>
     </>

@@ -5,6 +5,11 @@ import { DriverProfile } from '../models/DriverProfile';
 import { haversineKm, estimateDurationMin } from '../utils/geo';
 import { emitToDriver, emitToUser } from '../socket/io';
 import { syncDriverBusyState } from './driverAvailability';
+import {
+  assertPartnerSubscriptionActive,
+  filterSubscribedPartnerIds,
+  markPartnerFirstOrderCompleted,
+} from './partnerSubscription';
 
 /** Default 90s (MVP testing); override with RIDE_REQUEST_TIMEOUT_MS in `.env`. */
 const REQUEST_TIMEOUT_MS = Number(process.env.RIDE_REQUEST_TIMEOUT_MS || 90_000);
@@ -49,7 +54,10 @@ export async function findEligibleDrivers(
     currentLocation: { $exists: true, $ne: null },
   }).lean();
 
+  const subscribed = await filterSubscribedPartnerIds(approvedIds, 'driver');
+
   return drivers
+    .filter((d) => subscribed.has(d._id.toString()))
     .map((d) => {
       const coords = d.currentLocation!.coordinates;
       const lng = coords[0];
@@ -90,10 +98,14 @@ async function findEligibleDriversAnyDistance(
     currentLocation: { $exists: true, $ne: null },
   }).lean();
 
-  return drivers.map((d) => {
-    const profile = approved.find((p) => p.driverId.toString() === d._id.toString());
-    return { id: d._id.toString(), name: d.name, distanceKm: 0, rating: profile?.rating ?? 4.5 };
-  });
+  const subscribed = await filterSubscribedPartnerIds(approvedIds, 'driver');
+
+  return drivers
+    .filter((d) => subscribed.has(d._id.toString()))
+    .map((d) => {
+      const profile = approved.find((p) => p.driverId.toString() === d._id.toString());
+      return { id: d._id.toString(), name: d.name, distanceKm: 0, rating: profile?.rating ?? 4.5 };
+    });
 }
 
 async function buildRequestPayload(rideId: string, driverId: string) {
@@ -280,6 +292,13 @@ export async function acceptRideRequest(
     return { ok: false, message: 'Request expired or assigned to another driver' };
   }
 
+  try {
+    await assertPartnerSubscriptionActive(driverId, 'driver');
+  } catch (e) {
+    const err = e as { message?: string };
+    return { ok: false, message: err.message ?? 'Subscription required' };
+  }
+
   const state = dispatches.get(rideId);
   if (state?.timeout) clearTimeout(state.timeout);
   dispatches.delete(rideId);
@@ -301,6 +320,8 @@ export async function acceptRideRequest(
     driverId,
     status: ride.status,
   });
+
+  await markPartnerFirstOrderCompleted(driverId, 'driver');
 
   return { ok: true };
 }

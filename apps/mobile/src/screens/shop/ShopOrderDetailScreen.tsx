@@ -193,6 +193,9 @@ export function ShopOrderDetailScreen() {
 
       {order.status === 'placed' ? (
         <>
+          <Text style={styles.acceptDeadline}>
+            Accept within 3 minutes or the order is cancelled automatically.
+          </Text>
           <Text style={styles.label}>Estimated prep (minutes)</Text>
           <View style={styles.prepRow}>
             {PREP_OPTIONS.map((m) => (
@@ -280,6 +283,7 @@ const styles = StyleSheet.create({
   pipeLabelOn: { color: colors.text, fontWeight: '600' },
   meta: { color: colors.textSecondary, marginBottom: 4 },
   delay: { color: '#fbbf24', marginBottom: 8 },
+  acceptDeadline: { color: colors.primaryBright, fontWeight: '600', marginBottom: 12 },
   label: { color: colors.textSecondary, fontWeight: '600', marginTop: 8, marginBottom: 6 },
   input: {
     backgroundColor: colors.inputBg,

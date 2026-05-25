@@ -196,6 +196,12 @@ export async function setOnlineStatus(req: AuthedRequest, res: Response, next: N
     await syncDriverBusyState(req.user!.sub);
 
     const online = Boolean(req.body.online);
+    if (online) {
+      const { assertPartnerSubscriptionActive } = await import(
+        '../services/partnerSubscription'
+      );
+      await assertPartnerSubscriptionActive(req.user!.sub, 'driver');
+    }
     const lat = Number(req.body.lat);
     const lng = Number(req.body.lng);
     const updates: Record<string, unknown> = { isDriverOnline: online };
@@ -312,20 +318,10 @@ export async function advanceRideStatus(req: AuthedRequest, res: Response, next:
     ride.status = target;
 
     if (target === 'completed') {
-      const driverEarned = ride.driverEarned || Math.max(0, ride.fare - ride.platformFee);
-      await DriverEarning.create({
-        driverId: ride.captainId!,
-        rideId: ride._id,
-        amount: ride.fare,
-        platformFee: ride.platformFee,
-        driverEarned,
-        type: 'ride',
-        status: 'pending',
-      });
+      ride.paymentStatus = 'pending';
+      ride.driverEarningsSettled = false;
       const profile = await DriverProfile.findOne({ driverId: req.user!.sub });
       if (profile) {
-        profile.walletPending += driverEarned;
-        profile.walletTotalEarned += driverEarned;
         profile.totalRides += 1;
         await profile.save();
       }

@@ -47,6 +47,14 @@ export function buildRideRoutes(): Router {
     void rides.cancelRide(req as AuthedRequest, res, next);
   };
 
+  const checkoutRidePaymentHandler: RequestHandler = (req, res, next) => {
+    void rides.checkoutRidePayment(req as AuthedRequest, res, next);
+  };
+
+  const verifyRidePaymentHandler: RequestHandler = (req, res, next) => {
+    void rides.verifyRidePaymentHandler(req as AuthedRequest, res, next);
+  };
+
   const publicPart = Router();
   publicPart.post('/rides/estimate', estimateValidators, estimateRideHandler);
 
@@ -54,8 +62,14 @@ export function buildRideRoutes(): Router {
   protectedPart.use(authMiddleware);
   protectedPart.post('/rides', placeValidators, createRideHandler);
   protectedPart.get('/rides', listRidesHandler);
+  protectedPart.post('/rides/payment/verify', [
+    body('razorpay_order_id').notEmpty(),
+    body('razorpay_payment_id').notEmpty(),
+    body('razorpay_signature').notEmpty(),
+  ], verifyRidePaymentHandler);
   protectedPart.get('/rides/:id', getRideHandler);
   protectedPart.get('/rides/:id/contact', getRideContactHandler);
+  protectedPart.post('/rides/:id/payment/checkout', checkoutRidePaymentHandler);
   protectedPart.patch('/rides/:id/cancel', cancelRideHandler);
 
   const r = Router();

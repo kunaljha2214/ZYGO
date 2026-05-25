@@ -29,6 +29,7 @@ import shopOwnerRoutes from './routes/shopOwnerRoutes';
 import deliveryPartnerRoutes from './routes/deliveryPartnerRoutes';
 import driverRoutes from './routes/driverRoutes';
 import referralRoutes from './routes/referralRoutes';
+import partnerSubscriptionRoutes from './routes/partnerSubscriptionRoutes';
 
 import { buildRideRoutes } from './routes/rideRoutes';
 
@@ -37,6 +38,9 @@ import { vehicleTypes } from './config/app';
 import { ensureUploadDir } from './utils/uploads';
 
 import { initSocket } from './socket/io';
+import { restoreRestaurantAcceptTimeouts } from './services/orderAcceptTimeout';
+import { razorpayWebhook } from './controllers/paymentController';
+import { getRazorpayConfig } from './config/razorpay';
 
 
 
@@ -62,6 +66,14 @@ app.use(
 
 app.use(morgan('dev'));
 
+app.post(
+  '/api/v1/webhooks/razorpay',
+  express.raw({ type: 'application/json' }),
+  (req, res, next) => {
+    void razorpayWebhook(req, res, next);
+  }
+);
+
 app.use(express.json({ limit: '8mb' }));
 
 
@@ -83,6 +95,7 @@ v1.use('/shop', shopOwnerRoutes);
 v1.use('/delivery-partner', deliveryPartnerRoutes);
 v1.use('/driver', driverRoutes);
 v1.use('/referrals', referralRoutes);
+v1.use('/partner/subscription', partnerSubscriptionRoutes);
 
 v1.use(foodRoutes);
 
@@ -96,6 +109,11 @@ v1.get('/config/vehicle-types', (_req, res) => {
 
   res.json({ vehicleTypes: vehicleTypes() });
 
+});
+
+v1.get('/config/payments', (_req, res) => {
+  const { keyId, enabled } = getRazorpayConfig();
+  res.json({ razorpay: { enabled, keyId: enabled ? keyId : null } });
 });
 
 
@@ -123,6 +141,7 @@ async function main(): Promise<void> {
   const server = http.createServer(app);
 
   initSocket(server);
+  await restoreRestaurantAcceptTimeouts();
 
   server.listen(PORT, host, () => {
 

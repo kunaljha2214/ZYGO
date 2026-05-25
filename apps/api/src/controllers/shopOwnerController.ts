@@ -10,6 +10,7 @@ import {
 import { Restaurant } from '../models/Restaurant';
 import { MenuItem } from '../models/MenuItem';
 import { User } from '../models/User';
+import { RestaurantEarning } from '../models/RestaurantEarning';
 import { saveBase64Document } from '../utils/uploads';
 
 const PENDING_APPROVAL_MSG = 'Your shop is still pending for approval';
@@ -62,6 +63,8 @@ export function serializeOwnerRestaurant(doc: InstanceType<typeof OwnerRestauran
     submittedAt: doc.submittedAt ?? null,
     adminReviewedAt: doc.adminReviewedAt ?? null,
     restaurantListingId: doc.restaurantListingId?.toString() ?? null,
+    walletPending: doc.walletPending ?? 0,
+    walletTotalEarned: doc.walletTotalEarned ?? 0,
     createdAt: (doc as { createdAt?: Date }).createdAt ?? null,
     updatedAt: (doc as { updatedAt?: Date }).updatedAt ?? null,
   };
@@ -628,6 +631,37 @@ export async function rejectRegistration(
     await doc.save();
 
     res.json({ registration: serializeOwnerRestaurant(doc) });
+  } catch (e) {
+    next(e);
+  }
+}
+
+export async function getShopWallet(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const reg = await OwnerRestaurant.findOne({ ownerId: req.user!.sub });
+    if (!reg) {
+      next(createError(404, 'Shop registration not found'));
+      return;
+    }
+    const entries = await RestaurantEarning.find({ ownerId: req.user!.sub })
+      .sort({ createdAt: -1 })
+      .limit(30)
+      .lean();
+    res.json({
+      pending: reg.walletPending ?? 0,
+      totalEarned: reg.walletTotalEarned ?? 0,
+      entries: entries.map((e) => ({
+        id: e._id.toString(),
+        orderNumber: e.orderNumber,
+        amount: e.amount,
+        status: e.status,
+        createdAt: e.createdAt,
+      })),
+    });
   } catch (e) {
     next(e);
   }

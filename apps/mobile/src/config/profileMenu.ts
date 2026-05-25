@@ -6,6 +6,7 @@ export type ProfileMenuItemId =
   | 'my_orders'
   | 'safety'
   | 'refer'
+  | 'subscription'
   | 'rewards'
   | 'saved_addresses'
   | 'earnings'
@@ -34,6 +35,13 @@ const REFER_ITEM: ProfileMenuItem = {
   subtitle: 'Get ₹50',
 };
 
+const SUBSCRIPTION_ITEM: ProfileMenuItem = {
+  id: 'subscription',
+  icon: '⭐',
+  label: 'Subscription',
+  subtitle: 'Monthly plan',
+};
+
 export function profileMenuForRole(role: string | undefined): ProfileMenuItem[] {
   switch (role) {
     case 'customer':
@@ -53,6 +61,7 @@ export function profileMenuForRole(role: string | undefined): ProfileMenuItem[] 
         { id: 'help', icon: '❓', label: 'Help' },
         { id: 'safety', icon: '🛡️', label: 'Safety' },
         REFER_ITEM,
+        SUBSCRIPTION_ITEM,
         { id: 'ride_history', icon: '🕐', label: 'My rides' },
         { id: 'earnings', icon: '💰', label: 'Earnings' },
         { id: 'wallet', icon: '👛', label: 'Wallet & payouts' },
@@ -63,6 +72,7 @@ export function profileMenuForRole(role: string | undefined): ProfileMenuItem[] 
         { id: 'help', icon: '❓', label: 'Help' },
         { id: 'safety', icon: '🛡️', label: 'Safety' },
         REFER_ITEM,
+        SUBSCRIPTION_ITEM,
         { id: 'delivery_history', icon: '🕐', label: 'Delivery history' },
         { id: 'earnings', icon: '💰', label: 'Earnings' },
         { id: 'wallet', icon: '👛', label: 'Wallet & payouts' },
@@ -71,6 +81,7 @@ export function profileMenuForRole(role: string | undefined): ProfileMenuItem[] 
       return [
         { id: 'help', icon: '❓', label: 'Help' },
         REFER_ITEM,
+        SUBSCRIPTION_ITEM,
         { id: 'shop_orders', icon: '📋', label: 'Shop orders' },
         { id: 'shop_menu', icon: '🍽️', label: 'Menu management' },
         { id: 'shop_insights', icon: '📊', label: 'Insights & offers' },
