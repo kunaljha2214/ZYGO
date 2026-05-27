@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { PermissionsAndroid, Platform } from 'react-native';
 import notifee, { AndroidImportance, EventType, type Event } from '@notifee/react-native';
 import type { FirebaseMessagingTypes } from '@react-native-firebase/messaging';
 import { api } from '../api/client';
@@ -56,7 +56,7 @@ function navigateFromNotificationData(data: NotificationData): void {
   ref.navigate(route.root);
 }
 
-async function ensureNotificationChannel(): Promise<void> {
+export async function ensureNotificationChannel(): Promise<void> {
   if (Platform.OS !== 'android') return;
   await notifee.createChannel({
     id: CHANNEL_ID,
@@ -65,17 +65,45 @@ async function ensureNotificationChannel(): Promise<void> {
   });
 }
 
+async function requestAndroidPostNotifications(): Promise<boolean> {
+  if (Platform.OS !== 'android') return true;
+  if (typeof Platform.Version === 'number' && Platform.Version < 33) return true;
+
+  const result = await PermissionsAndroid.request(
+    PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+  );
+  return result === PermissionsAndroid.RESULTS.GRANTED;
+}
+
 async function requestNotificationPermission(): Promise<boolean> {
+  const androidGranted = await requestAndroidPostNotifications();
+  if (!androidGranted) {
+    console.warn('[notifications] POST_NOTIFICATIONS denied');
+    return false;
+  }
+
+  const messaging = getMessaging();
+  if (messaging) {
+    await messaging().requestPermission();
+  }
+
   const settings = await notifee.requestPermission();
   return settings.authorizationStatus >= 1;
 }
 
 async function registerTokenWithApi(fcmToken: string): Promise<void> {
   if (Platform.OS !== 'android' && Platform.OS !== 'ios') return;
-  await api.post('/users/push-tokens', {
+  const res = await api.post<{ ok: boolean; pushEnabledOnServer?: boolean }>('/users/push-tokens', {
     token: fcmToken,
     platform: Platform.OS,
   });
+  if (res.data.pushEnabledOnServer === false) {
+    console.warn(
+      '[notifications] Server cannot send FCM — add FIREBASE_* env vars on Render and redeploy'
+    );
+  } else {
+    console.log('[notifications] FCM token registered with API');
+  }
 }
 
 async function displayForegroundNotification(
@@ -117,19 +145,24 @@ export async function registerForPushNotifications(): Promise<void> {
       return;
     }
 
-    const permitted = await requestNotificationPermission();
-    if (!permitted) return;
-
     await ensureNotificationChannel();
+
+    const permitted = await requestNotificationPermission();
+    if (!permitted) {
+      console.warn('[notifications] Notification permission not granted');
+      return;
+    }
 
     try {
       await messaging().registerDeviceForRemoteMessages();
       const fcmToken = await messaging().getToken();
       if (fcmToken) {
         await registerTokenWithApi(fcmToken);
+      } else {
+        console.warn('[notifications] FCM returned empty token');
       }
     } catch (err) {
-      console.warn('[notifications] FCM registration skipped', err);
+      console.warn('[notifications] FCM registration failed', err);
     }
   })().finally(() => {
     registrationInFlight = null;
@@ -199,8 +232,6 @@ export function setBackgroundNotificationHandler(): void {
   if (!messaging) return;
 
   messaging().setBackgroundMessageHandler(async (message) => {
-    if (!message.notification) {
-      await displayForegroundNotification(message);
-    }
+    await displayForegroundNotification(message);
   });
 }

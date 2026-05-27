@@ -263,7 +263,7 @@ export async function cancelRide(
     ride.assignmentState = 'none';
     ride.pendingDriverId = null;
     await ride.save();
-    notifyRideStakeholdersOnCustomerCancel(ride);
+    await notifyRideStakeholdersOnCustomerCancel(ride);
     res.json(formatRide(ride));
   } catch (e) {
     next(e);

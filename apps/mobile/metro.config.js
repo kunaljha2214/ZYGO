@@ -34,6 +34,26 @@ function resolveImagePicker(moduleName) {
   return null;
 }
 
+const NOTIFEE_PKG = `${path.sep}@notifee${path.sep}react-native${path.sep}`;
+
+/** Ensure Notifee's generated `version.js` resolves in hoisted monorepo installs. */
+function resolveNotifeeRelative(context, moduleName) {
+  const origin = context.originModulePath;
+  if (!origin.includes(NOTIFEE_PKG)) return null;
+  if (moduleName !== './version' && moduleName !== './version.js') return null;
+
+  const candidates = [
+    path.join(workspaceRoot, 'node_modules', '@notifee', 'react-native', 'dist', 'version.js'),
+    path.join(projectRoot, 'node_modules', '@notifee', 'react-native', 'dist', 'version.js'),
+  ];
+  for (const filePath of candidates) {
+    if (fs.existsSync(filePath)) {
+      return { type: 'sourceFile', filePath };
+    }
+  }
+  return null;
+}
+
 /** @rnmapbox/maps ships Fabric specs as .ts; Metro must resolve them from .js imports. */
 function resolveRnmapboxSpecs(context, moduleName) {
   const origin = context.originModulePath;
@@ -73,6 +93,8 @@ const config = {
       if (imagePickerResolved) return imagePickerResolved;
       const mapboxResolved = resolveRnmapboxSpecs(context, moduleName);
       if (mapboxResolved) return mapboxResolved;
+      const notifeeResolved = resolveNotifeeRelative(context, moduleName);
+      if (notifeeResolved) return notifeeResolved;
       return context.resolveRequest(context, moduleName, platform);
     },
   },

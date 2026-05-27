@@ -20,3 +20,10 @@ services:
         value: 7
       - key: CORS_ORIGIN
         value: '*'
+      # Required for FCM push (from Firebase Console → Service accounts → Generate key)
+      - key: FIREBASE_PROJECT_ID
+        sync: false
+      - key: FIREBASE_CLIENT_EMAIL
+        sync: false
+      - key: FIREBASE_PRIVATE_KEY
+        sync: false

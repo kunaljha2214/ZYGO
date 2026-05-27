@@ -93,9 +93,9 @@ export async function markRidePaid(
     });
   }
 
-  dispatchCustomerRideEvent(ride, 'payment_success', { fare: ride.fare });
+  await dispatchCustomerRideEvent(ride, 'payment_success', { fare: ride.fare });
   if (ride.captainId) {
-    dispatchDriverRideEvent(ride.captainId, ride, 'payment_received', { fare: ride.fare });
+    await dispatchDriverRideEvent(ride.captainId, ride, 'payment_received', { fare: ride.fare });
   }
 
   return ride;

@@ -3,6 +3,7 @@ import { validationResult } from 'express-validator';
 import type { Response, NextFunction } from 'express';
 import type { AuthedRequest } from '../middleware/auth';
 import { PushToken, type PushPlatform } from '../models/PushToken';
+import { isPushConfigured } from '../services/pushNotification';
 
 export async function registerPushToken(
   req: AuthedRequest,
@@ -38,7 +39,7 @@ export async function registerPushToken(
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    res.json({ ok: true });
+    res.json({ ok: true, pushEnabledOnServer: isPushConfigured() });
   } catch (e) {
     next(e);
   }

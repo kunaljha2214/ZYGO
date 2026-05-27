@@ -38,6 +38,7 @@ import { vehicleTypes } from './config/app';
 import { ensureUploadDir } from './utils/uploads';
 
 import { initSocket } from './socket/io';
+import { isPushConfigured } from './services/pushNotification';
 import { restoreRestaurantAcceptTimeouts } from './services/orderAcceptTimeout';
 import { razorpayWebhook } from './controllers/paymentController';
 import { getRazorpayConfig } from './config/razorpay';
@@ -86,6 +87,19 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 const v1 = express.Router();
 
+v1.get('/config/vehicle-types', (_req, res) => {
+  res.json({ vehicleTypes: vehicleTypes() });
+});
+
+v1.get('/config/payments', (_req, res) => {
+  const { keyId, enabled } = getRazorpayConfig();
+  res.json({ razorpay: { enabled, keyId: enabled ? keyId : null } });
+});
+
+v1.get('/config/push-status', (_req, res) => {
+  res.json({ pushEnabled: isPushConfigured() });
+});
+
 v1.use('/auth', authRoutes);
 
 v1.use('/users', userRoutes);
@@ -102,19 +116,6 @@ v1.use(foodRoutes);
 v1.use(orderRoutes);
 
 v1.use(buildRideRoutes());
-
-
-
-v1.get('/config/vehicle-types', (_req, res) => {
-
-  res.json({ vehicleTypes: vehicleTypes() });
-
-});
-
-v1.get('/config/payments', (_req, res) => {
-  const { keyId, enabled } = getRazorpayConfig();
-  res.json({ razorpay: { enabled, keyId: enabled ? keyId : null } });
-});
 
 
 
@@ -144,9 +145,14 @@ async function main(): Promise<void> {
   await restoreRestaurantAcceptTimeouts();
 
   server.listen(PORT, host, () => {
-
     console.log(`Zygo API + Socket.IO on http://${host}:${PORT}/api/v1`);
-
+    if (isPushConfigured()) {
+      console.log('[push] Firebase Admin configured — FCM delivery enabled');
+    } else {
+      console.warn(
+        '[push] FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY missing — notifications save to DB but FCM is disabled'
+      );
+    }
   });
 
 }

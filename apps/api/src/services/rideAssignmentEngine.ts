@@ -214,7 +214,7 @@ async function sendToNextDriver(rideId: string): Promise<void> {
 
   const ride = await RideBooking.findById(rideId);
   if (ride) {
-    dispatchDriverRideEvent(driverId, ride, 'ride_requested');
+    await dispatchDriverRideEvent(driverId, ride, 'ride_requested');
   }
 
   ensureDispatchTimer(rideId, driverId);
@@ -327,7 +327,7 @@ export async function acceptRideRequest(
     driverId,
     status: ride.status,
   });
-  dispatchCustomerRideEvent(ride, 'ride_accepted');
+  await dispatchCustomerRideEvent(ride, 'ride_accepted');
 
   await markPartnerFirstOrderCompleted(driverId, 'driver');
 

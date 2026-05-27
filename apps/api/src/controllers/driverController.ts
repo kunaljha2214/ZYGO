@@ -322,13 +322,13 @@ export async function advanceRideStatus(req: AuthedRequest, res: Response, next:
     ride.status = target;
 
     if (target === 'arriving') {
-      dispatchCustomerRideEvent(ride, 'driver_moving', { etaMinutes: ride.durationMin });
+      await dispatchCustomerRideEvent(ride, 'driver_moving', { etaMinutes: ride.durationMin });
     }
     if (target === 'arrived') {
-      dispatchCustomerRideEvent(ride, 'driver_arrived');
+      await dispatchCustomerRideEvent(ride, 'driver_arrived');
     }
     if (target === 'in_progress') {
-      dispatchCustomerRideEvent(ride, 'ride_started');
+      await dispatchCustomerRideEvent(ride, 'ride_started');
     }
 
     if (target === 'completed') {
@@ -343,8 +343,8 @@ export async function advanceRideStatus(req: AuthedRequest, res: Response, next:
         isDriverBusy: false,
         activeRideId: null,
       });
-      dispatchCustomerRideEvent(ride, 'ride_completed', { fare: ride.fare });
-      dispatchDriverRideEvent(req.user!.sub, ride, 'ride_completed_earnings', {
+      await dispatchCustomerRideEvent(ride, 'ride_completed', { fare: ride.fare });
+      await dispatchDriverRideEvent(req.user!.sub, ride, 'ride_completed_earnings', {
         earnings: ride.driverEarned ?? ride.estimatedDriverEarnings,
       });
     }

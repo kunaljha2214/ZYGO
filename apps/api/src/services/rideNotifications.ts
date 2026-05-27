@@ -1,6 +1,6 @@
 import { Types } from 'mongoose';
 import type { IRideBooking } from '../models/RideBooking';
-import { dispatchNotificationAsync } from './notificationDispatcher';
+import { dispatchNotification } from './notificationDispatcher';
 import {
   buildCustomerRideNotification,
   buildDriverRideNotification,
@@ -19,60 +19,60 @@ function rideId(ride: Pick<IRideBooking, '_id'>): string {
   return ride._id.toString();
 }
 
-export function dispatchCustomerRideEvent(
+export async function dispatchCustomerRideEvent(
   ride: IRideBooking,
   type: CustomerRideNotificationType,
   context: RideNotificationContext = {}
-): void {
+): Promise<void> {
   const payload = buildCustomerRideNotification(rideId(ride), type, {
     vehicleType: ride.vehicleType,
     fare: context.fare ?? ride.fare,
     etaMinutes: context.etaMinutes,
   });
-  dispatchNotificationAsync({
+  await dispatchNotification({
     userId: ride.userId,
     domain: 'ride',
     payload,
   });
 }
 
-export function dispatchDriverRideEvent(
+export async function dispatchDriverRideEvent(
   driverId: string | Types.ObjectId,
   ride: IRideBooking,
   type: DriverRideNotificationType,
   context: RideNotificationContext = {}
-): void {
+): Promise<void> {
   const payload = buildDriverRideNotification(rideId(ride), type, {
     vehicleType: ride.vehicleType,
     fare: context.fare ?? ride.fare,
     earnings: context.earnings ?? ride.driverEarned ?? ride.estimatedDriverEarnings,
     incentiveLabel: context.incentiveLabel,
   });
-  dispatchNotificationAsync({
+  await dispatchNotification({
     userId: driverId,
     domain: 'ride',
     payload,
   });
 }
 
-export function notifyRideStakeholdersOnCustomerCancel(ride: IRideBooking): void {
-  dispatchCustomerRideEvent(ride, 'ride_cancelled');
+export async function notifyRideStakeholdersOnCustomerCancel(ride: IRideBooking): Promise<void> {
+  await dispatchCustomerRideEvent(ride, 'ride_cancelled');
   if (ride.captainId) {
-    dispatchDriverRideEvent(ride.captainId, ride, 'ride_cancelled');
+    await dispatchDriverRideEvent(ride.captainId, ride, 'ride_cancelled');
   } else if (ride.pendingDriverId) {
-    dispatchDriverRideEvent(ride.pendingDriverId, ride, 'ride_cancelled');
+    await dispatchDriverRideEvent(ride.pendingDriverId, ride, 'ride_cancelled');
   }
 }
 
-export function dispatchDriverIncentiveEarned(
+export async function dispatchDriverIncentiveEarned(
   driverId: string | Types.ObjectId,
   rideIdForContext: string,
   label?: string
-): void {
+): Promise<void> {
   const payload = buildDriverRideNotification(rideIdForContext, 'incentive_earned', {
     incentiveLabel: label,
   });
-  dispatchNotificationAsync({
+  await dispatchNotification({
     userId: driverId,
     domain: 'ride',
     payload,
