@@ -96,3 +96,28 @@ export async function setShopOpenStatus(isAcceptingOrders: boolean) {
   );
   return data;
 }
+
+/** How customers see this shop on the restaurant list (subscription, toggle, hours). */
+export type ShopCustomerVisibility = {
+  restaurantId: string;
+  restaurantName: string;
+  isListingActive: boolean;
+  listVisible: boolean;
+  isOpenNow: boolean;
+  canOrder: boolean;
+  subscriptionActive: boolean;
+  acceptingOrders: boolean;
+  availabilityLabel: string | null;
+  subscriptionReason: string;
+  firstOrderCompleted: boolean;
+  subscriptionExpiresAt: string | null;
+  subscriptionGraceExpiresAt: string | null;
+  isWithinScheduledHours: boolean;
+  checkedAt: string;
+  customerListSummary: string;
+};
+
+export async function fetchShopCustomerVisibility() {
+  const { data } = await api.get<ShopCustomerVisibility>('/shop/restaurant/customer-visibility');
+  return data;
+}

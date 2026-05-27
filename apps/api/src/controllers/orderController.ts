@@ -38,6 +38,7 @@ import {
   notifyFoodStakeholdersOnCustomerCancel,
 } from '../services/orderNotifications';
 import { dispatchRestaurantNotification } from '../services/restaurantNotifications';
+import { assertRestaurantAcceptingCustomerOrders } from '../services/restaurantCustomerVisibility';
 
 type PrepareCheckoutInput = {
   restaurantId: string;
@@ -53,9 +54,7 @@ async function prepareOrderCheckout(input: PrepareCheckoutInput) {
   if (!restaurant || !restaurant.isActive) {
     throw createError(404, 'Restaurant not found');
   }
-  if (restaurant.isAcceptingOrders === false) {
-    throw createError(403, 'Restaurant is closed and not accepting orders right now');
-  }
+  await assertRestaurantAcceptingCustomerOrders(restaurant._id);
 
   const { lineItems, subtotal, cartItemNames } = await buildOrderLines(restaurant, input.items);
 

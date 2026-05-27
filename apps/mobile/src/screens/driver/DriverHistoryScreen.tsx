@@ -4,7 +4,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import { AppScreen } from '../../components/layout/AppScreen';
 import { GlassCard } from '../../components/neon/GlassCard';
 import { fetchDriverHistory } from '../../api/driver';
-import { colors, spacing, radii } from '../../theme';
+import { colors, spacing } from '../../theme';
+import { formatTripDateTime } from '../../utils/formatDateTime';
+import { formatInr } from '../../utils/formatMoney';
 
 export function DriverHistoryScreen() {
   const [history, setHistory] = useState<Awaited<ReturnType<typeof fetchDriverHistory>>>([]);
@@ -37,8 +39,9 @@ export function DriverHistoryScreen() {
         scrollEnabled={false}
         renderItem={({ item }) => (
           <GlassCard style={styles.rowCard}>
+            <Text style={styles.when}>{formatTripDateTime(item.completedAt)}</Text>
             <View style={styles.row}>
-              <Text style={styles.earn}>₹{item.driverEarned.toFixed(2)}</Text>
+              <Text style={styles.earn}>{formatInr(item.driverEarned)}</Text>
               <Text style={styles.km}>{item.distanceKm} km</Text>
             </View>
             <Text style={styles.pickup}>{item.pickup}</Text>
@@ -63,6 +66,12 @@ const styles = StyleSheet.create({
   center: { alignItems: 'center', paddingVertical: spacing.xl },
   rowCard: { marginBottom: spacing.md },
   emptyCard: { alignItems: 'center', paddingVertical: spacing.xl },
+  when: {
+    color: colors.lavender,
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: spacing.sm,
+  },
   row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
   earn: { color: '#4ade80', fontWeight: '800', fontSize: 20 },
   km: { color: colors.lavender, fontWeight: '700' },

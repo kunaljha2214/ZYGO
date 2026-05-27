@@ -8,6 +8,8 @@ type Props = {
   rating: number;
   cuisines: string[];
   distanceKm?: number;
+  isOpenNow?: boolean;
+  availabilityLabel?: string | null;
   onPress: () => void;
 };
 
@@ -22,7 +24,17 @@ function initials(name: string) {
   return name.slice(0, 2).toUpperCase();
 }
 
-export function RestaurantListCard({ name, rating, cuisines, distanceKm, onPress }: Props) {
+export function RestaurantListCard({
+  name,
+  rating,
+  cuisines,
+  distanceKm,
+  isOpenNow = true,
+  availabilityLabel,
+  onPress,
+}: Props) {
+  const closedLabel = !isOpenNow ? availabilityLabel : null;
+
   return (
     <GlassCard onPress={onPress} style={styles.card}>
       <View style={styles.row}>
@@ -41,6 +53,11 @@ export function RestaurantListCard({ name, rating, cuisines, distanceKm, onPress
               {cuisineLine(cuisines)}
             </Text>
           </View>
+          {closedLabel ? (
+            <Text style={styles.closedLabel} numberOfLines={2}>
+              {closedLabel}
+            </Text>
+          ) : null}
         </View>
         <Text style={styles.chevron}>›</Text>
       </View>
@@ -75,6 +92,13 @@ const styles = StyleSheet.create({
   rating: { color: colors.lavender, fontWeight: '700', fontSize: 14 },
   dot: { color: colors.textMuted, fontSize: 14 },
   cuisines: { color: colors.textMuted, fontSize: 13, flex: 1, lineHeight: 18 },
+  closedLabel: {
+    color: colors.primaryBright,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 6,
+    fontWeight: '600',
+  },
   distance: { color: colors.lavender, fontSize: 13, fontWeight: '600' },
   chevron: { color: colors.primaryBright, fontSize: 24, fontWeight: '300' },
 });

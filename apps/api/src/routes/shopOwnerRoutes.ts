@@ -51,6 +51,7 @@ r.post(
 r.post('/restaurant/submit', shopOnly, wrap(shop.submitForReview));
 
 r.get('/restaurant/open-status', shopOnly, wrap(shop.getShopOpenStatus));
+r.get('/restaurant/customer-visibility', shopOnly, wrap(shop.getCustomerVisibilityPreview));
 r.patch(
   '/restaurant/open-status',
   shopOnly,
@@ -146,6 +147,12 @@ r.post(
   shopOnly,
   [body('validityDays').optional().isInt({ min: 1, max: 365 })],
   wrap(shopOffers.reactivateOffer)
+);
+
+r.get(
+  '/admin/restaurant/:listingId/customer-visibility',
+  adminOnly,
+  wrap(shop.adminCustomerVisibilityPreview)
 );
 
 r.get('/restaurant/pending', adminOnly, wrap(shop.listPendingRegistrations));

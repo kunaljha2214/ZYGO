@@ -9,7 +9,12 @@ import {
   ActivityIndicator} from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { fetchShopDashboard } from '../../api/shopDashboard';
-import { fetchShopOpenStatus, setShopOpenStatus } from '../../api/shopOwner';
+import {
+  fetchShopOpenStatus,
+  setShopOpenStatus,
+  fetchShopCustomerVisibility,
+  type ShopCustomerVisibility,
+} from '../../api/shopOwner';
 import type { ShopDashboard } from '../../types/shopDashboard';
 import { MetricCard } from '../../components/dashboard/MetricCard';
 import { MiniBarChart } from '../../components/dashboard/MiniBarChart';
@@ -36,17 +41,22 @@ export function ShopOwnerDashboard({ shopName }: Props) {
   const [err, setErr] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(true);
   const [openToggling, setOpenToggling] = useState(false);
+  const [customerVisibility, setCustomerVisibility] = useState<ShopCustomerVisibility | null>(
+    null
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
     setErr(null);
     try {
-      const [dash, openStatus] = await Promise.all([
+      const [dash, openStatus, visibility] = await Promise.all([
         fetchShopDashboard(),
         fetchShopOpenStatus(),
+        fetchShopCustomerVisibility().catch(() => null),
       ]);
       setData(dash);
       setIsOpen(openStatus.isAcceptingOrders);
+      setCustomerVisibility(visibility);
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Could not load dashboard');
     } finally {
@@ -61,6 +71,8 @@ export function ShopOwnerDashboard({ shopName }: Props) {
     try {
       const res = await setShopOpenStatus(next);
       setIsOpen(res.isAcceptingOrders);
+      const visibility = await fetchShopCustomerVisibility().catch(() => null);
+      setCustomerVisibility(visibility);
     } catch (e) {
       setIsOpen(prev);
       AppAlert.alert(
@@ -114,6 +126,26 @@ export function ShopOwnerDashboard({ shopName }: Props) {
         loading={openToggling}
         onToggle={(v) => void onToggleOpen(v)}
       />
+
+      {customerVisibility ? (
+        <View
+          style={[
+            styles.visibilityCard,
+            customerVisibility.listVisible ? styles.visibilityOk : styles.visibilityWarn,
+          ]}
+        >
+          <Text style={styles.visibilityTitle}>Customer app visibility</Text>
+          <Text style={styles.visibilitySummary}>{customerVisibility.customerListSummary}</Text>
+          {!customerVisibility.subscriptionActive ? (
+            <Text style={styles.visibilityMeta}>
+              Renew your monthly plan to appear on the customer restaurant list.
+            </Text>
+          ) : null}
+          {customerVisibility.availabilityLabel && customerVisibility.listVisible ? (
+            <Text style={styles.visibilityMeta}>{customerVisibility.availabilityLabel}</Text>
+          ) : null}
+        </View>
+      ) : null}
 
       <View style={styles.metricsRow}>
         <MetricCard label="Orders today" value={String(s.ordersToday)} />
@@ -197,6 +229,30 @@ const styles = StyleSheet.create({
   greeting: { fontSize: 14, color: colors.textSecondary, marginBottom: 4 },
   shopTitle: { fontSize: 26, fontWeight: '800', color: colors.text, marginBottom: 6 },
   rating: { fontSize: 14, color: colors.primaryBright, fontWeight: '600', marginBottom: 18 },
+  visibilityCard: {
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    padding: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  visibilityOk: {
+    backgroundColor: colors.surfaceHighlight,
+    borderColor: colors.glassBorder,
+  },
+  visibilityWarn: {
+    backgroundColor: 'rgba(251, 191, 36, 0.08)',
+    borderColor: 'rgba(251, 191, 36, 0.35)',
+  },
+  visibilityTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.lavender,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  visibilitySummary: { color: colors.text, fontSize: 14, lineHeight: 20, fontWeight: '600' },
+  visibilityMeta: { color: colors.textMuted, fontSize: 13, lineHeight: 18, marginTop: 6 },
   metricsRow: { flexDirection: 'row', gap: spacing.md },
   section: {
     fontSize: 11,

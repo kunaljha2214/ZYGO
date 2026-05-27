@@ -26,9 +26,15 @@ type Props = {
   item: MenuItemCardData;
   restaurantId: string;
   restaurantName: string;
+  orderingEnabled?: boolean;
 };
 
-export function MenuItemCard({ item, restaurantId, restaurantName }: Props) {
+export function MenuItemCard({
+  item,
+  restaurantId,
+  restaurantName,
+  orderingEnabled = true,
+}: Props) {
   const [detailOpen, setDetailOpen] = useState(false);
   const imageUri = resolveMediaUrl(item.imageUrl);
 
@@ -59,15 +65,17 @@ export function MenuItemCard({ item, restaurantId, restaurantName }: Props) {
               <Text style={styles.price}>₹{item.price}</Text>
             </View>
           </Pressable>
-          <MenuItemCartControls
-            menuItemId={item.id}
-            name={item.name}
-            price={item.price}
-            restaurantId={restaurantId}
-            restaurantName={restaurantName}
-            variants={item.variants ?? []}
-            addOns={item.addOns ?? []}
-          />
+          {orderingEnabled ? (
+            <MenuItemCartControls
+              menuItemId={item.id}
+              name={item.name}
+              price={item.price}
+              restaurantId={restaurantId}
+              restaurantName={restaurantName}
+              variants={item.variants ?? []}
+              addOns={item.addOns ?? []}
+            />
+          ) : null}
         </View>
       </Card>
 
@@ -76,6 +84,7 @@ export function MenuItemCard({ item, restaurantId, restaurantName }: Props) {
         item={item}
         restaurantId={restaurantId}
         restaurantName={restaurantName}
+        orderingEnabled={orderingEnabled}
         onClose={() => setDetailOpen(false)}
       />
     </>

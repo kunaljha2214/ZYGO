@@ -13,6 +13,9 @@ type RestDetail = {
   id: string;
   name: string;
   menu: MenuItemCardData[];
+  isOpenNow?: boolean;
+  canOrder?: boolean;
+  availabilityLabel?: string | null;
 };
 
 type Props = HomeStackProps<'RestaurantDetail'>;
@@ -79,20 +82,49 @@ export function RestaurantDetailScreen({ navigation, route }: Props) {
     );
   }
 
+  const canOrder = data.canOrder !== false;
+  const closedBanner = !canOrder ? data.availabilityLabel : null;
+
   return (
     <FlatList
       contentContainerStyle={[inset.listContent, { paddingBottom: inset.bottom + 16 }]}
       data={data.menu}
       keyExtractor={(item) => item.id}
       extraData={cartItems}
+      ListHeaderComponent={
+        closedBanner ? (
+          <View style={styles.closedBanner}>
+            <Text style={styles.closedBannerText}>{closedBanner}</Text>
+          </View>
+        ) : null
+      }
       renderItem={({ item }) => (
-        <MenuItemCard item={item} restaurantId={data.id} restaurantName={data.name} />
+        <MenuItemCard
+          item={item}
+          restaurantId={data.id}
+          restaurantName={data.name}
+          orderingEnabled={canOrder}
+        />
       )}
     />
   );
 }
 
 const styles = StyleSheet.create({
+  closedBanner: {
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.chipBorder,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 12,
+  },
+  closedBannerText: {
+    color: colors.lavender,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
+  },
   cartHeaderBtn: {
     marginRight: 4,
     padding: 6,

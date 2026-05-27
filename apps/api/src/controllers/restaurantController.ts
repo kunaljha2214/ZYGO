@@ -4,6 +4,12 @@ import type { AuthedRequest } from '../middleware/auth';
 import { Restaurant } from '../models/Restaurant';
 import { MenuItem, isMenuItemActiveNow } from '../models/MenuItem';
 import { haversineKm, normalizeLatLng } from '../utils/geo';
+import {
+  loadFirstOrderCompletedFlags,
+  loadOwnerRegsForRestaurants,
+  resolveCustomerRestaurantVisibility,
+  getCustomerVisibilityForRestaurant,
+} from '../services/restaurantCustomerVisibility';
 
 const DEFAULT_RADIUS_KM = 7;
 
@@ -14,11 +20,7 @@ export async function listRestaurants(
 ): Promise<void> {
   try {
     const { search, cuisine } = req.query as { search?: string; cuisine?: string };
-    // $ne: false includes legacy rows where isAcceptingOrders was never set (treated as open).
-    const filter: Record<string, unknown> = {
-      isActive: true,
-      isAcceptingOrders: { $ne: false },
-    };
+    const filter: Record<string, unknown> = { isActive: true };
     if (search) {
       filter.name = { $regex: new RegExp(search, 'i') };
     }
@@ -51,29 +53,53 @@ export async function listRestaurants(
     }
 
     const list = await Restaurant.find(filter).sort({ rating: -1 }).lean();
+    const ownerByListing = await loadOwnerRegsForRestaurants(list);
+    const firstOrderFlags = await loadFirstOrderCompletedFlags(list, ownerByListing);
 
-    const mapped = list
-      .map((r) => {
-        const [lng, lat] = r.location.coordinates;
-        const restPoint = normalizeLatLng({ lat, lng });
-        const distanceKm = customerPoint
-          ? Math.round(haversineKm(customerPoint, restPoint) * 100) / 100
-          : undefined;
-        return {
-          id: r._id,
-          name: r.name,
-          image: r.image,
-          cuisine: r.cuisine,
-          rating: r.rating,
-          location: r.location,
-          distanceKm,
-        };
+    const withVisibility = await Promise.all(
+      list.map(async (r) => {
+        const reg = ownerByListing.get(r._id.toString()) ?? null;
+        const firstDone = firstOrderFlags.get(r._id.toString()) ?? false;
+        const visibility = await resolveCustomerRestaurantVisibility(r, reg, firstDone);
+        return { r, visibility };
       })
+    );
+
+    const mapped = (
+      await Promise.all(
+        withVisibility.map(async ({ r, visibility }) => {
+          if (!visibility.listVisible) return null;
+
+          const [lng, lat] = r.location.coordinates;
+          const restPoint = normalizeLatLng({ lat, lng });
+          const distanceKm = customerPoint
+            ? Math.round(haversineKm(customerPoint, restPoint) * 100) / 100
+            : undefined;
+
+          return {
+            id: r._id,
+            name: r.name,
+            image: r.image,
+            cuisine: r.cuisine,
+            rating: r.rating,
+            location: r.location,
+            distanceKm,
+            isOpenNow: visibility.isOpenNow,
+            canOrder: visibility.canOrder,
+            availabilityLabel: visibility.availabilityLabel,
+          };
+        })
+      )
+    )
+      .filter((row): row is NonNullable<typeof row> => row != null)
       .filter((r) => {
         if (!customerPoint || r.distanceKm == null) return true;
         return r.distanceKm <= radiusKm;
       })
       .sort((a, b) => {
+        if (a.isOpenNow !== b.isOpenNow) {
+          return a.isOpenNow ? -1 : 1;
+        }
         if (a.distanceKm != null && b.distanceKm != null) {
           return a.distanceKm - b.distanceKm;
         }
@@ -93,10 +119,17 @@ export async function getRestaurant(
 ): Promise<void> {
   try {
     const r = await Restaurant.findById(req.params.id).lean();
-    if (!r) {
+    if (!r || !r.isActive) {
       next(createError(404, 'Restaurant not found'));
       return;
     }
+
+    const visibility = await getCustomerVisibilityForRestaurant(r);
+    if (!visibility.listVisible) {
+      next(createError(404, 'Restaurant not found'));
+      return;
+    }
+
     const menu = await MenuItem.find({ restaurantId: r._id })
       .sort({ category: 1, name: 1 })
       .lean();
@@ -108,6 +141,9 @@ export async function getRestaurant(
       cuisine: r.cuisine,
       rating: r.rating,
       location: r.location,
+      isOpenNow: visibility.isOpenNow,
+      canOrder: visibility.canOrder,
+      availabilityLabel: visibility.availabilityLabel,
       menu: visible.map((m) => ({
         id: m._id,
         name: m.name,

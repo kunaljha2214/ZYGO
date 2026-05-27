@@ -7,6 +7,9 @@ export type NearbyRestaurant = {
   cuisine: string[];
   rating: number;
   distanceKm?: number;
+  isOpenNow: boolean;
+  canOrder: boolean;
+  availabilityLabel?: string | null;
   location?: {
     type: string;
     coordinates: [number, number];

@@ -91,6 +91,8 @@ export function RestaurantListScreen({ navigation }: Props) {
               rating={item.rating}
               cuisines={item.cuisine}
               distanceKm={item.distanceKm}
+              isOpenNow={item.isOpenNow}
+              availabilityLabel={item.availabilityLabel}
               onPress={() =>
                 navigation.navigate('RestaurantDetail', { id: item.id, title: item.name })
               }

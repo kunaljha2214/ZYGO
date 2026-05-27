@@ -12,6 +12,7 @@ import { MenuItem } from '../models/MenuItem';
 import { User } from '../models/User';
 import { RestaurantEarning } from '../models/RestaurantEarning';
 import { saveBase64Document } from '../utils/uploads';
+import { buildCustomerVisibilityPreview } from '../services/restaurantCustomerVisibility';
 
 const PENDING_APPROVAL_MSG = 'Your shop is still pending for approval';
 
@@ -530,6 +531,43 @@ export async function approveRegistration(
     await doc.save();
 
     res.json({ registration: serializeOwnerRestaurant(doc) });
+  } catch (e) {
+    next(e);
+  }
+}
+
+/** How this shop appears on the customer restaurant list (subscription, toggle, hours). */
+export async function getCustomerVisibilityPreview(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const reg = await getApprovedRegistration(req.user!.sub);
+    if (!reg) {
+      next(createError(403, PENDING_APPROVAL_MSG));
+      return;
+    }
+    if (!reg.restaurantListingId) {
+      next(createError(404, 'Restaurant listing not found'));
+      return;
+    }
+    const preview = await buildCustomerVisibilityPreview(reg.restaurantListingId);
+    res.json(preview);
+  } catch (e) {
+    next(e);
+  }
+}
+
+/** Admin: preview customer-list visibility for any published listing. */
+export async function adminCustomerVisibilityPreview(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const preview = await buildCustomerVisibilityPreview(req.params.listingId);
+    res.json(preview);
   } catch (e) {
     next(e);
   }

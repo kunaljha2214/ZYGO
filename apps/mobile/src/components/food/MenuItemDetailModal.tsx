@@ -23,6 +23,7 @@ type Props = {
   item: MenuItemCardData;
   restaurantId: string;
   restaurantName: string;
+  orderingEnabled?: boolean;
   onClose: () => void;
 };
 
@@ -49,6 +50,7 @@ export function MenuItemDetailModal({
   item,
   restaurantId,
   restaurantName,
+  orderingEnabled = true,
   onClose,
 }: Props) {
   const { width } = useWindowDimensions();
@@ -114,15 +116,17 @@ export function MenuItemDetailModal({
                         ) : null}
                       </View>
                       <View style={styles.addCol}>
-                        <MenuItemCartControls
-                          menuItemId={item.id}
-                          name={item.name}
-                          price={item.price}
-                          restaurantId={restaurantId}
-                          restaurantName={restaurantName}
-                          variants={item.variants ?? []}
-                          addOns={item.addOns ?? []}
-                        />
+                        {orderingEnabled ? (
+                          <MenuItemCartControls
+                            menuItemId={item.id}
+                            name={item.name}
+                            price={item.price}
+                            restaurantId={restaurantId}
+                            restaurantName={restaurantName}
+                            variants={item.variants ?? []}
+                            addOns={item.addOns ?? []}
+                          />
+                        ) : null}
                         {hasVariants || hasAddOns ? (
                           <Text style={styles.customizeLabel}>Customisable</Text>
                         ) : null}

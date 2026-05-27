@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Modal, Pressable, ActivityIndicator } from 'rea
 import { useDriverRequestStore } from '../../store/driverRequestStore';
 import { acceptRide, rejectRide } from '../../api/driver';
 import { colors, radii, spacing } from '../../theme';
+import { formatInr } from '../../utils/formatMoney';
 
 type Props = {
   onAccepted: () => void;
@@ -72,9 +73,9 @@ export function DriverRequestModal({ onAccepted }: Props) {
               {incoming.distanceToPickupKm} km to pickup · {incoming.tripDistanceKm} km trip · ~
               {incoming.estimatedMinutes} min
             </Text>
-            <Text style={styles.earn}>Est. earnings ₹{incoming.estimatedEarnings}</Text>
+            <Text style={styles.earn}>Est. earnings {formatInr(incoming.estimatedEarnings)}</Text>
             <Text style={styles.fareMeta}>
-              Fare ₹{incoming.estimatedFare} · Platform ₹{incoming.platformFee}
+              Fare {formatInr(incoming.estimatedFare)} · Platform {formatInr(incoming.platformFee)}
             </Text>
             <View style={styles.actions}>
               <Pressable style={styles.reject} onPress={() => void onReject()} disabled={busy}>
