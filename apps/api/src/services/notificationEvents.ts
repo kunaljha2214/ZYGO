@@ -13,7 +13,9 @@ export type CustomerFoodNotificationType =
   | 'driver_nearby'
   | 'order_delivered'
   | 'refund_processed'
-  | 'driver_reassigning';
+  | 'driver_reassigning'
+  | 'finding_rider'
+  | 'no_rider_found';
 
 export type RestaurantFoodNotificationType =
   | 'new_order'
@@ -23,6 +25,7 @@ export type RestaurantFoodNotificationType =
   | 'order_completed'
   | 'order_cancelled'
   | 'driver_reassigning'
+  | 'no_rider_found'
   | 'new_review'
   | 'low_stock_warning';
 
@@ -166,6 +169,14 @@ export function buildCustomerFoodNotification(
       title: 'Finding another driver',
       body: `We are assigning a new delivery partner for ${order}.`,
     },
+    finding_rider: {
+      title: 'Finding delivery partner',
+      body: `We are looking for a rider to pick up ${order} from ${restaurant}.`,
+    },
+    no_rider_found: {
+      title: 'Still finding a rider',
+      body: `No delivery partner accepted yet for ${order}. We will keep searching.`,
+    },
   };
 
   return {
@@ -209,6 +220,10 @@ export function buildRestaurantFoodNotification(
     driver_reassigning: {
       title: 'Reassigning driver',
       body: `Finding another delivery partner for ${order}.`,
+    },
+    no_rider_found: {
+      title: 'No rider yet',
+      body: `${order} is ready but no delivery partner has accepted. We are searching again.`,
     },
     new_review: {
       title: 'New review',

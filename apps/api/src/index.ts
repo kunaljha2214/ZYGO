@@ -40,6 +40,7 @@ import { ensureUploadDir } from './utils/uploads';
 import { initSocket } from './socket/io';
 import { isPushConfigured } from './services/pushNotification';
 import { restoreRestaurantAcceptTimeouts } from './services/orderAcceptTimeout';
+import { restorePendingDispatchRetries } from './services/deliveryDispatchRetry';
 import { razorpayWebhook } from './controllers/paymentController';
 import { getRazorpayConfig } from './config/razorpay';
 
@@ -143,6 +144,7 @@ async function main(): Promise<void> {
 
   initSocket(server);
   await restoreRestaurantAcceptTimeouts();
+  await restorePendingDispatchRetries();
 
   server.listen(PORT, host, () => {
     console.log(`Zygo API + Socket.IO on http://${host}:${PORT}/api/v1`);

@@ -39,6 +39,7 @@ import {
 } from '../services/orderNotifications';
 import { dispatchRestaurantNotification } from '../services/restaurantNotifications';
 import { assertRestaurantAcceptingCustomerOrders } from '../services/restaurantCustomerVisibility';
+import { riderDispatchUiMessage } from '../utils/riderDispatchUi';
 
 type PrepareCheckoutInput = {
   restaurantId: string;
@@ -567,6 +568,8 @@ function formatOrder(doc: InstanceType<typeof FoodOrder>) {
       fulfillment: o.fulfillment,
     }),
     status: o.status,
+    assignmentState: o.assignmentState ?? 'none',
+    riderDispatchMessage: riderDispatchUiMessage(o.status, o.assignmentState),
     rejectReason: o.rejectReason,
     acceptExpiresAt: o.acceptExpiresAt ?? null,
     deliveryAddress: o.deliveryAddress,
@@ -620,6 +623,11 @@ function formatOrderLean(o: Record<string, unknown>) {
       fulfillment: (o.fulfillment as OrderFulfillment | undefined) ?? 'delivery',
     }),
     status: o.status,
+    assignmentState: (o.assignmentState as string | undefined) ?? 'none',
+    riderDispatchMessage: riderDispatchUiMessage(
+      String(o.status),
+      o.assignmentState as string | undefined
+    ),
     rejectReason: o.rejectReason as string | undefined,
     acceptExpiresAt: (o.acceptExpiresAt as Date | null | undefined) ?? null,
     deliveryAddress: o.deliveryAddress,

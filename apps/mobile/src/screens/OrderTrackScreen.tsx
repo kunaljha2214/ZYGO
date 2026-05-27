@@ -14,7 +14,11 @@ import type { CustomerPriceBreakdown } from '../api/orders';
 import { TripContactCard } from '../components/trip/TripContactCard';
 import { callOrderRestaurant, callOrderRider } from '../utils/placePeerCall';
 import { shared } from '../theme/styles';
-import { connectOrderTracking, disconnectOrderTracking } from '../services/orderSocket';
+import {
+  bindOrderDeliveryEvents,
+  connectOrderTracking,
+  disconnectOrderTracking,
+} from '../services/orderSocket';
 import { colors } from '../theme';
 import {
   coordsFromGeoLocation,
@@ -57,6 +61,8 @@ type FoodOrder = {
   packageFee?: number;
   gstAmount?: number;
   status: string;
+  assignmentState?: string;
+  riderDispatchMessage?: string | null;
   rejectReason?: string | null;
   acceptExpiresAt?: string | null;
   deliveryStatus?: string;
@@ -101,7 +107,9 @@ export function OrderTrackScreen() {
     },
     refetchInterval: (q) => {
       const status = q.state.data?.status;
+      const assignment = q.state.data?.assignmentState;
       if (status === 'placed') return 5000;
+      if (status === 'ready_for_pickup' && assignment !== 'assigned') return 8000;
       if (status && TRACK_MAP_STATUSES.has(status)) return 5000;
       return false;
     },
@@ -112,14 +120,25 @@ export function OrderTrackScreen() {
   }, []);
 
   useEffect(() => {
-    if (!data?.status || !TRACK_MAP_STATUSES.has(data.status)) return;
+    if (!data?.status) return;
+    const needsSocket =
+      TRACK_MAP_STATUSES.has(data.status) ||
+      (data.status === 'ready_for_pickup' && data.assignmentState !== 'assigned');
+    if (!needsSocket) return;
+
     const socket = connectOrderTracking(orderId);
     socket.on('rider:location', onRiderLocation);
+    const unbindDelivery = bindOrderDeliveryEvents(socket, {
+      onDispatching: () => void qc.invalidateQueries({ queryKey: ['order', orderId] }),
+      onNoRider: () => void qc.invalidateQueries({ queryKey: ['order', orderId] }),
+      onAssigned: () => void qc.invalidateQueries({ queryKey: ['order', orderId] }),
+    });
     return () => {
       socket.off('rider:location', onRiderLocation);
+      unbindDelivery();
       disconnectOrderTracking();
     };
-  }, [orderId, data?.status, onRiderLocation]);
+  }, [orderId, data?.status, data?.assignmentState, onRiderLocation, qc]);
 
   useEffect(() => {
     if (data?.riderLocation) {
@@ -180,6 +199,15 @@ export function OrderTrackScreen() {
       {data.status === 'placed' ? (
         <Text style={styles.acceptWindow}>
           Waiting for restaurant to accept (up to 3 minutes)
+        </Text>
+      ) : null}
+      {data.riderDispatchMessage ? (
+        <Text
+          style={
+            data.assignmentState === 'failed' ? styles.riderSearchWarn : styles.riderSearchInfo
+          }
+        >
+          {data.riderDispatchMessage}
         </Text>
       ) : null}
       {data.status === 'cancelled' && data.rejectReason ? (
@@ -270,6 +298,8 @@ const styles = StyleSheet.create({
   eta: { color: colors.primaryBright, fontWeight: '700', marginBottom: 8 },
   paymentPending: { color: '#fbbf24', fontWeight: '600', marginBottom: 8 },
   acceptWindow: { color: colors.primaryBright, fontWeight: '600', marginBottom: 8 },
+  riderSearchInfo: { color: colors.primaryBright, fontWeight: '600', marginBottom: 8, lineHeight: 20 },
+  riderSearchWarn: { color: '#fbbf24', fontWeight: '600', marginBottom: 8, lineHeight: 20 },
   cancelReason: { color: colors.error, fontWeight: '600', marginBottom: 8 },
   refunded: { color: colors.primaryBright, fontWeight: '600', marginBottom: 8 },
   mapWrap: {

@@ -64,3 +64,8 @@ export async function printShopInvoice(orderId: string) {
   const { data } = await api.post<ShopOrder>(`/shop/orders/${orderId}/print-invoice`);
   return data;
 }
+
+export async function retryShopOrderRiderDispatch(orderId: string) {
+  const { data } = await api.post<ShopOrder>(`/shop/orders/${orderId}/retry-rider-dispatch`);
+  return data;
+}

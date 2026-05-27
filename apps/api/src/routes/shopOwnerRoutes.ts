@@ -80,6 +80,7 @@ r.post(
   wrap(shopOrders.rejectOrder)
 );
 r.patch('/orders/:id/status', shopOnly, wrap(shopOrders.advanceOrderStatus));
+r.post('/orders/:id/retry-rider-dispatch', shopOnly, wrap(shopOrders.retryOrderRiderDispatch));
 r.patch('/orders/:id/notes', shopOnly, wrap(shopOrders.updateShopOrderNotes));
 r.post('/orders/:id/print-invoice', shopOnly, wrap(shopOrders.markInvoicePrinted));
 

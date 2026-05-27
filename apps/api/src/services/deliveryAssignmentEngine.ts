@@ -12,6 +12,11 @@ import {
   notifyFoodStakeholdersOnDriverReassign,
 } from './foodNotifications';
 import {
+  clearDispatchRetry,
+  getDispatchRetryIntervalMs,
+  scheduleDispatchRetry,
+} from './deliveryDispatchRetry';
+import {
   assertPartnerSubscriptionActive,
   filterSubscribedPartnerIds,
   markPartnerFirstOrderCompleted,
@@ -28,6 +33,42 @@ type DispatchState = {
 };
 
 const dispatches = new Map<string, DispatchState>();
+
+async function emitRestaurantOrderEvent(
+  order: IFoodOrder,
+  event: string,
+  payload: Record<string, unknown>
+): Promise<void> {
+  const restaurant = await Restaurant.findById(order.restaurantId).select('ownerId').lean();
+  if (restaurant?.ownerId) {
+    emitToUser(restaurant.ownerId.toString(), event, payload);
+  }
+}
+
+async function notifyDispatchStarted(order: IFoodOrder, isRetry: boolean): Promise<void> {
+  const orderId = order._id.toString();
+  emitToUser(order.userId.toString(), 'delivery:dispatching', { orderId, isRetry });
+  void emitToOrder(orderId, 'delivery:dispatching', { orderId, isRetry });
+  await emitRestaurantOrderEvent(order, 'delivery:dispatching', { orderId, isRetry });
+  if (!isRetry) {
+    dispatchCustomerFoodEvent(order, 'finding_rider');
+  }
+}
+
+async function notifyDispatchFailed(order: IFoodOrder): Promise<void> {
+  const orderId = order._id.toString();
+  const retryAt = scheduleDispatchRetry(orderId);
+  const payload = {
+    orderId,
+    nextRetryAt: retryAt.toISOString(),
+    retryInSeconds: Math.round(getDispatchRetryIntervalMs() / 1000),
+  };
+  emitToUser(order.userId.toString(), 'delivery:no_rider', payload);
+  void emitToOrder(orderId, 'delivery:no_rider', payload);
+  await emitRestaurantOrderEvent(order, 'delivery:no_rider', payload);
+  dispatchCustomerFoodEvent(order, 'no_rider_found');
+  dispatchRestaurantFoodEvent(order, 'no_rider_found');
+}
 
 function estimateEarnings(restaurantKm: number, customerKm: number): number {
   return Math.round(25 + restaurantKm * 4 + customerKm * 6);
@@ -187,9 +228,9 @@ async function sendToNextRider(orderId: string): Promise<void> {
       pendingPartnerId: null,
       dispatchExpiresAt: null,
     });
-    const order = await FoodOrder.findById(orderId).lean();
+    const order = await FoodOrder.findById(orderId);
     if (order) {
-      emitToUser(order.userId.toString(), 'delivery:no_rider', { orderId });
+      await notifyDispatchFailed(order);
     }
     return;
   }
@@ -238,10 +279,16 @@ async function handleRequestTimeout(orderId: string, riderId: string): Promise<v
   await sendToNextRider(orderId);
 }
 
-export async function startDeliveryDispatch(orderId: string): Promise<void> {
+export async function startDeliveryDispatch(
+  orderId: string,
+  options: { isRetry?: boolean } = {}
+): Promise<void> {
+  if (dispatches.has(orderId)) return;
+
   const order = await FoodOrder.findById(orderId);
   if (!order) return;
   if (order.deliveryPartnerId || order.assignmentState === 'assigned') return;
+  if (order.status !== 'ready_for_pickup') return;
 
   const restaurant = await Restaurant.findById(order.restaurantId).lean();
   if (!restaurant) return;
@@ -259,6 +306,7 @@ export async function startDeliveryDispatch(orderId: string): Promise<void> {
   order.assignmentState = 'dispatching';
   order.deliveryStatus = 'none';
   await order.save();
+  await notifyDispatchStarted(order, Boolean(options.isRetry));
 
   const exclude = (order.rejectedPartnerIds ?? []).map((id) => id.toString());
   const radiusTiers = [SEARCH_RADIUS_KM, 25, 100];
@@ -277,7 +325,7 @@ export async function startDeliveryDispatch(orderId: string): Promise<void> {
     console.warn(
       `[delivery] No riders for order ${orderId}. Partners must be approved, online, not busy, and have location set.`
     );
-    emitToUser(order.userId.toString(), 'delivery:no_rider', { orderId });
+    await notifyDispatchFailed(order);
     return;
   }
 
@@ -310,6 +358,7 @@ export async function acceptDeliveryRequest(
   const state = dispatches.get(orderId);
   if (state?.timeout) clearTimeout(state.timeout);
   dispatches.delete(orderId);
+  clearDispatchRetry(orderId);
 
   order.deliveryPartnerId = new Types.ObjectId(partnerId);
   order.pendingPartnerId = null;

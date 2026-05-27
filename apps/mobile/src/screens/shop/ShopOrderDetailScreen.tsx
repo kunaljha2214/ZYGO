@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { AppAlert } from '../../alert';
 import {
   View,
@@ -15,6 +15,7 @@ import { callShopOrderCustomer } from '../../utils/placePeerCall';
 import {
   acceptShopOrder,
   advanceShopOrderStatus,
+  retryShopOrderRiderDispatch,
   fetchShopOrder,
   printShopInvoice,
   rejectShopOrder,
@@ -76,6 +77,12 @@ export function ShopOrderDetailScreen() {
     }, [load])
   );
 
+  useEffect(() => {
+    if (order?.status !== 'ready_for_pickup' || order.assignmentState === 'assigned') return;
+    const id = setInterval(() => void load(), 10_000);
+    return () => clearInterval(id);
+  }, [order?.status, order?.assignmentState, load]);
+
   const run = async (fn: () => Promise<ShopOrder>) => {
     setBusy(true);
     try {
@@ -131,6 +138,26 @@ export function ShopOrderDetailScreen() {
           );
         })}
       </View>
+
+      {order.riderDispatchMessage ? (
+        <View
+          style={[
+            styles.riderBanner,
+            order.assignmentState === 'failed' ? styles.riderBannerWarn : styles.riderBannerInfo,
+          ]}
+        >
+          <Text style={styles.riderBannerText}>{order.riderDispatchMessage}</Text>
+          {order.status === 'ready_for_pickup' && order.assignmentState === 'failed' ? (
+            <Button
+              title="Search for rider now"
+              variant="ghost"
+              onPress={() => void run(() => retryShopOrderRiderDispatch(orderId))}
+              loading={busy}
+              style={{ marginTop: 8 }}
+            />
+          ) : null}
+        </View>
+      ) : null}
 
       {order.customer && CUSTOMER_CONTACT_STATUSES.has(order.status) ? (
         <TripContactCard
@@ -295,4 +322,20 @@ const styles = StyleSheet.create({
     minHeight: 44},
   prepRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
   prepBtn: { minWidth: 56 },
-  reject: { color: colors.error, marginTop: 16, fontWeight: '600' }});
+  reject: { color: colors.error, marginTop: 16, fontWeight: '600' },
+  riderBanner: {
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 12,
+  },
+  riderBannerInfo: {
+    backgroundColor: 'rgba(139, 92, 246, 0.12)',
+    borderColor: 'rgba(139, 92, 246, 0.35)',
+  },
+  riderBannerWarn: {
+    backgroundColor: 'rgba(251, 191, 36, 0.1)',
+    borderColor: 'rgba(251, 191, 36, 0.35)',
+  },
+  riderBannerText: { color: colors.text, fontSize: 14, lineHeight: 20, fontWeight: '600' },
+});

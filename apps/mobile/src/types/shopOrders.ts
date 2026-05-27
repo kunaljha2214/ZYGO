@@ -40,6 +40,8 @@ export type ShopOrder = {
   updatedAt: string;
   nextAction: ShopOrderStatus | null;
   shouldPrintInvoice: boolean;
+  assignmentState?: string;
+  riderDispatchMessage?: string | null;
   customer?: OrderPeerSummary | null;
 };
 

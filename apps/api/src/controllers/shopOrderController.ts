@@ -13,7 +13,9 @@ import {
   suggestBatches,
   SHOP_STATUS_FLOW,
 } from '../utils/shopOrderLogic';
+import { clearDispatchRetry } from '../services/deliveryDispatchRetry';
 import { startDeliveryDispatch } from '../services/deliveryAssignmentEngine';
+import { riderDispatchUiMessage } from '../utils/riderDispatchUi';
 import {
   assertPartnerSubscriptionActive,
   markPartnerFirstOrderCompleted,
@@ -56,6 +58,11 @@ function formatShopOrder(o: Record<string, unknown>) {
     nextAction: nextStatus(o.status as string),
     shouldPrintInvoice:
       o.status === 'confirmed' && !o.invoicePrintedAt,
+    assignmentState: (o.assignmentState as string | undefined) ?? 'none',
+    riderDispatchMessage: riderDispatchUiMessage(
+      String(o.status),
+      o.assignmentState as string | undefined
+    ),
   };
 }
 
@@ -330,6 +337,36 @@ export async function rejectOrder(
     res.json(
       formatShopOrder((fresh ?? order).toObject() as unknown as Record<string, unknown>)
     );
+  } catch (e) {
+    next(e);
+  }
+}
+
+/** Shop owner: manually restart rider search (also runs automatically every ~2 min). */
+export async function retryOrderRiderDispatch(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const { order } = await getOwnerOrder(req, req.params.id);
+    if (order.status !== 'ready_for_pickup') {
+      next(createError(400, 'Rider search only applies to orders ready for pickup'));
+      return;
+    }
+    if (order.deliveryPartnerId) {
+      next(createError(400, 'A delivery partner is already assigned'));
+      return;
+    }
+    clearDispatchRetry(order._id.toString());
+    order.rejectedPartnerIds = [];
+    order.assignmentState = 'none';
+    await order.save();
+    void startDeliveryDispatch(order._id.toString()).catch((err) => {
+      console.error('[delivery] manual retry failed', err);
+    });
+    const fresh = await FoodOrder.findById(order._id);
+    res.json(await formatShopOrderWithCustomer(fresh ?? order));
   } catch (e) {
     next(e);
   }
