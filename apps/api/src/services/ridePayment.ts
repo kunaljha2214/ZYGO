@@ -11,6 +11,10 @@ import {
   verifyPaymentSignature,
 } from './razorpayService';
 import { emitToUser } from '../socket/io';
+import {
+  dispatchCustomerRideEvent,
+  dispatchDriverRideEvent,
+} from './rideNotifications';
 
 /** Rides completed before post-pay flow may already have a DriverEarning row. */
 export async function syncLegacyRidePaymentStatus(ride: IRideBooking): Promise<void> {
@@ -87,6 +91,11 @@ export async function markRidePaid(
       status: ride.status,
       paymentStatus: ride.paymentStatus,
     });
+  }
+
+  dispatchCustomerRideEvent(ride, 'payment_success', { fare: ride.fare });
+  if (ride.captainId) {
+    dispatchDriverRideEvent(ride.captainId, ride, 'payment_received', { fare: ride.fare });
   }
 
   return ride;

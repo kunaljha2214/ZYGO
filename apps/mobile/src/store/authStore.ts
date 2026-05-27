@@ -8,6 +8,7 @@ import { clearDriverProfileCache } from './partnerProfileCache';
 import { useDeliveryRequestStore } from './deliveryRequestStore';
 import { queryClient } from '../queryClient';
 import { api } from '../api/client';
+import { unregisterCurrentPushToken } from '../services/notifications';
 
 const STORAGE_KEY = 'zygo_auth';
 
@@ -59,6 +60,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout: async () => {
     const user = get().user;
     await goOfflineIfDriver(user);
+    await unregisterCurrentPushToken();
 
     disconnectDriverSocket();
     disconnectDeliverySocket();

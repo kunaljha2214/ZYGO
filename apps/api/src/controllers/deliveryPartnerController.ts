@@ -9,6 +9,10 @@ import { DeliveryEarning } from '../models/DeliveryEarning';
 import { Restaurant } from '../models/Restaurant';
 import { settleFoodOrderOnDelivered } from '../services/orderSettlement';
 import {
+  dispatchCustomerFoodEvent,
+  dispatchRestaurantFoodEvent,
+} from '../services/foodNotifications';
+import {
   acceptDeliveryRequest,
   getPendingRequestForPartner,
   rejectDeliveryRequest,
@@ -226,6 +230,7 @@ const STATUS_FLOW: DeliveryPartnerStatus[] = [
   'arriving_at_restaurant',
   'picked_up',
   'out_for_delivery',
+  'arrived_at_customer',
   'delivered',
 ];
 
@@ -259,21 +264,27 @@ export async function advanceDeliveryStatus(
     order.deliveryStatus = target;
 
     if (target === 'arriving_at_restaurant') {
-      /* no customer status change */
+      dispatchRestaurantFoodEvent(order, 'driver_arrived');
     }
     if (target === 'picked_up') {
       order.pickedUpAt = new Date();
       order.status = 'out_for_delivery';
       void emitToOrder(order._id.toString(), 'delivery:picked_up', { orderId: order._id });
+      dispatchCustomerFoodEvent(order, 'food_picked_up');
     }
     if (target === 'out_for_delivery') {
       order.outForDeliveryAt = new Date();
       order.status = 'out_for_delivery';
     }
+    if (target === 'arrived_at_customer') {
+      order.status = 'out_for_delivery';
+      dispatchCustomerFoodEvent(order, 'driver_nearby');
+    }
     if (target === 'delivered') {
       order.deliveredAt = new Date();
       order.status = 'delivered';
       await settleFoodOrderOnDelivered(order);
+      dispatchCustomerFoodEvent(order, 'order_delivered');
     }
 
     await order.save();

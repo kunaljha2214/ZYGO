@@ -25,6 +25,7 @@ export type DeliveryPartnerStatus =
   | 'arriving_at_restaurant'
   | 'picked_up'
   | 'out_for_delivery'
+  | 'arrived_at_customer'
   | 'delivered'
   | 'cancelled';
 
@@ -189,6 +190,7 @@ const FoodOrderSchema = new Schema<IFoodOrder>(
         'arriving_at_restaurant',
         'picked_up',
         'out_for_delivery',
+        'arrived_at_customer',
         'delivered',
         'cancelled',
       ],

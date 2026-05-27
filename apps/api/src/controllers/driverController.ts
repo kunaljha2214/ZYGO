@@ -16,6 +16,10 @@ import { syncDriverBusyState } from '../services/driverAvailability';
 import { saveBase64Document } from '../utils/uploads';
 import { emitToUser } from '../socket/io';
 import {
+  dispatchCustomerRideEvent,
+  dispatchDriverRideEvent,
+} from '../services/rideNotifications';
+import {
   getCustomerContactForCaptain,
   getCustomerDisplayName,
 } from '../services/ridePeerContact';
@@ -317,6 +321,16 @@ export async function advanceRideStatus(req: AuthedRequest, res: Response, next:
 
     ride.status = target;
 
+    if (target === 'arriving') {
+      dispatchCustomerRideEvent(ride, 'driver_moving', { etaMinutes: ride.durationMin });
+    }
+    if (target === 'arrived') {
+      dispatchCustomerRideEvent(ride, 'driver_arrived');
+    }
+    if (target === 'in_progress') {
+      dispatchCustomerRideEvent(ride, 'ride_started');
+    }
+
     if (target === 'completed') {
       ride.paymentStatus = 'pending';
       ride.driverEarningsSettled = false;
@@ -328,6 +342,10 @@ export async function advanceRideStatus(req: AuthedRequest, res: Response, next:
       await User.findByIdAndUpdate(req.user!.sub, {
         isDriverBusy: false,
         activeRideId: null,
+      });
+      dispatchCustomerRideEvent(ride, 'ride_completed', { fare: ride.fare });
+      dispatchDriverRideEvent(req.user!.sub, ride, 'ride_completed_earnings', {
+        earnings: ride.driverEarned ?? ride.estimatedDriverEarnings,
       });
     }
 

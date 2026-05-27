@@ -14,6 +14,11 @@ import { RootNavigator } from './src/navigation/RootNavigator';
 import { useAuthStore } from './src/store/authStore';
 import { colors, navigationTheme } from './src/theme';
 import { ensureMapboxInitialized } from './src/config/mapboxInit';
+import {
+  registerForPushNotifications,
+  startPushNotificationListeners,
+  stopPushNotificationListeners,
+} from './src/services/notifications';
 function AppBootstrap() {
   const hydrated = useAuthStore((s) => s.hydrated);
   const token = useAuthStore((s) => s.token);
@@ -24,6 +29,18 @@ function AppBootstrap() {
     void hydrate();
     void ensureMapboxInitialized().catch(() => {});
   }, [hydrate]);
+
+  useEffect(() => {
+    if (!token || !user) {
+      stopPushNotificationListeners();
+      return;
+    }
+
+    startPushNotificationListeners();
+    registerForPushNotifications().catch((err) => {
+      console.warn('[notifications] registration failed', err);
+    });
+  }, [token, user]);
 
   if (!hydrated) {
     return (

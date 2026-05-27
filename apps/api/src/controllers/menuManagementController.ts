@@ -7,6 +7,7 @@ import { MenuItem, isMenuItemActiveNow, type SpicyLevel } from '../models/MenuIt
 import { OwnerRestaurant } from '../models/OwnerRestaurant';
 import { PENDING_APPROVAL_MSG, requireApprovedRestaurantId } from '../utils/menuAccess';
 import { saveBase64Document } from '../utils/uploads';
+import { dispatchRestaurantNotification } from '../services/restaurantNotifications';
 
 function serializeCategory(doc: InstanceType<typeof MenuCategory>) {
   return {
@@ -279,6 +280,7 @@ export async function updateMenuItemFull(
       return;
     }
 
+    const previousStockStatus = item.stockStatus;
     const parsed = parseItemBody(req.body as Record<string, unknown>);
     if (parsed.name) item.name = parsed.name;
     if (Number.isFinite(parsed.price) && parsed.price >= 1) item.price = parsed.price;
@@ -307,6 +309,15 @@ export async function updateMenuItemFull(
     item.autoDisableAt = parsed.autoDisableAt;
     item.isAvailable = parsed.isAvailable;
     await item.save();
+    if (previousStockStatus !== 'out_of_stock' && item.stockStatus === 'out_of_stock') {
+      dispatchRestaurantNotification({
+        restaurantId: restaurantId.toString(),
+        type: 'low_stock_warning',
+        title: 'Low stock warning',
+        body: `${item.name} is marked out of stock.`,
+        extraData: { menuItemId: item._id.toString() },
+      });
+    }
 
     res.json({ item: serializeMenuItemFull(item) });
   } catch (e) {
@@ -326,6 +337,7 @@ export async function patchMenuItemAvailability(
       next(createError(404, 'Menu item not found'));
       return;
     }
+    const previousStockStatus = item.stockStatus;
     const body = req.body as {
       stockStatus?: 'in_stock' | 'out_of_stock';
       isAvailable?: boolean;
@@ -337,6 +349,15 @@ export async function patchMenuItemAvailability(
       item.autoDisableAt = body.autoDisableAt ? new Date(body.autoDisableAt) : null;
     }
     await item.save();
+    if (previousStockStatus !== 'out_of_stock' && item.stockStatus === 'out_of_stock') {
+      dispatchRestaurantNotification({
+        restaurantId: restaurantId.toString(),
+        type: 'low_stock_warning',
+        title: 'Low stock warning',
+        body: `${item.name} is marked out of stock.`,
+        extraData: { menuItemId: item._id.toString() },
+      });
+    }
     res.json({ item: serializeMenuItemFull(item) });
   } catch (e) {
     next(e);

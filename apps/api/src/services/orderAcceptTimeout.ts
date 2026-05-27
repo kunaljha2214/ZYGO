@@ -1,6 +1,7 @@
 import { FoodOrder } from '../models/FoodOrder';
 import { emitToUser } from '../socket/io';
 import { refundPaidFoodOrder } from './orderRefund';
+import { dispatchCustomerOrderEvent } from './orderNotifications';
 
 export const RESTAURANT_ACCEPT_TIMEOUT_MS = 3 * 60 * 1000;
 
@@ -59,6 +60,7 @@ export async function cancelOrderIfAcceptTimedOut(orderId: string): Promise<bool
 
   if (!order) return false;
 
+  dispatchCustomerOrderEvent(order, 'order_rejected', { reason: ACCEPT_TIMEOUT_REJECT_REASON });
   await refundPaidFoodOrder(orderId);
   return true;
 }

@@ -36,6 +36,10 @@ const cancelOrderHandler: RequestHandler = (req, res, next) => {
   void orders.cancelOrder(req as AuthedRequest, res, next);
 };
 
+const createOrderReviewHandler: RequestHandler = (req, res, next) => {
+  void orders.createOrderReview(req as AuthedRequest, res, next);
+};
+
 const verifyOrderPaymentHandler: RequestHandler = (req, res, next) => {
   void orders.verifyOrderPayment(req as AuthedRequest, res, next);
 };
@@ -92,5 +96,13 @@ r.get('/orders/:id', getOrderHandler);
 r.get('/orders/:id/contact/restaurant', getOrderRestaurantContactHandler);
 r.get('/orders/:id/contact/rider', getOrderRiderContactHandler);
 r.patch('/orders/:id/cancel', cancelOrderHandler);
+r.post(
+  '/orders/:id/review',
+  [
+    body('rating').isInt({ min: 1, max: 5 }),
+    body('comment').optional().isString(),
+  ],
+  createOrderReviewHandler
+);
 
 export default r;

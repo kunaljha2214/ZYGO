@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1084368805432",
+    "project_id": "zygo-a1c8b",
+    "storage_bucket": "zygo-a1c8b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1084368805432:android:770eb5edaadbbec0ff50cd",
+        "android_client_info": {
+          "package_name": "com.zygomobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCs06M6IFhIlQ3fiKIyr5aP4YH4gWhyyHw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

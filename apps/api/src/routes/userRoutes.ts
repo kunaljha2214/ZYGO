@@ -2,6 +2,8 @@ import { Router, type RequestHandler } from 'express';
 import { body } from 'express-validator';
 import { authMiddleware, type AuthedRequest } from '../middleware/auth';
 import * as users from '../controllers/userController';
+import * as notifications from '../controllers/notificationController';
+import * as notificationInbox from '../controllers/notificationInboxController';
 
 const r = Router();
 
@@ -31,6 +33,14 @@ const updateProfileHandler: RequestHandler = (req, res, next) => {
   void users.updateProfile(req as AuthedRequest, res, next);
 };
 
+const registerPushTokenHandler: RequestHandler = (req, res, next) => {
+  void notifications.registerPushToken(req as AuthedRequest, res, next);
+};
+
+const unregisterPushTokenHandler: RequestHandler = (req, res, next) => {
+  void notifications.unregisterPushToken(req as AuthedRequest, res, next);
+};
+
 const uploadProfilePhotoHandler: RequestHandler = (req, res, next) => {
   void users.uploadProfilePhoto(req as AuthedRequest, res, next);
 };
@@ -54,6 +64,32 @@ r.patch(
   ],
   updateProfileHandler
 );
+
+r.post(
+  '/push-tokens',
+  [
+    body('token').trim().notEmpty().withMessage('Push token required'),
+    body('platform').isIn(['android', 'ios']).withMessage('Invalid push platform'),
+  ],
+  registerPushTokenHandler
+);
+
+r.delete(
+  '/push-tokens',
+  [body('token').trim().notEmpty().withMessage('Push token required')],
+  unregisterPushTokenHandler
+);
+
+const listNotificationsHandler: RequestHandler = (req, res, next) => {
+  void notificationInbox.listNotifications(req as AuthedRequest, res, next);
+};
+
+const markNotificationsReadHandler: RequestHandler = (req, res, next) => {
+  void notificationInbox.markNotificationsRead(req as AuthedRequest, res, next);
+};
+
+r.get('/notifications', listNotificationsHandler);
+r.patch('/notifications/read', markNotificationsReadHandler);
 
 r.get('/addresses', listAddressesHandler);
 

@@ -2,6 +2,7 @@ import { FoodOrder, type IFoodOrder } from '../models/FoodOrder';
 import { ShopOffer } from '../models/ShopOffer';
 import { createRazorpayRefund } from './razorpayService';
 import { emitToUser } from '../socket/io';
+import { dispatchCustomerOrderEvent } from './orderNotifications';
 
 export type FoodOrderRefundResult = {
   refunded: boolean;
@@ -17,6 +18,7 @@ function emitOrderPaymentUpdate(order: IFoodOrder): void {
     rejectReason: order.rejectReason,
     refundedAt: order.refundedAt,
   });
+  dispatchCustomerOrderEvent(order, 'refund_processed');
 }
 
 async function reverseOfferUsage(order: IFoodOrder): Promise<void> {

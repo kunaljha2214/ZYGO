@@ -4,6 +4,7 @@ import { User } from '../models/User';
 import { DriverProfile } from '../models/DriverProfile';
 import { haversineKm, estimateDurationMin } from '../utils/geo';
 import { emitToDriver, emitToUser } from '../socket/io';
+import { dispatchCustomerRideEvent, dispatchDriverRideEvent } from './rideNotifications';
 import { syncDriverBusyState } from './driverAvailability';
 import {
   assertPartnerSubscriptionActive,
@@ -210,6 +211,12 @@ async function sendToNextDriver(rideId: string): Promise<void> {
   });
 
   emitToDriver(driverId, 'ride:request', payload);
+
+  const ride = await RideBooking.findById(rideId);
+  if (ride) {
+    dispatchDriverRideEvent(driverId, ride, 'ride_requested');
+  }
+
   ensureDispatchTimer(rideId, driverId);
 }
 
@@ -320,6 +327,7 @@ export async function acceptRideRequest(
     driverId,
     status: ride.status,
   });
+  dispatchCustomerRideEvent(ride, 'ride_accepted');
 
   await markPartnerFirstOrderCompleted(driverId, 'driver');
 

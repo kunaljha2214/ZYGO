@@ -6,6 +6,12 @@ import { DeliveryPartnerProfile } from '../models/DeliveryPartnerProfile';
 import { haversineKm, estimateDurationMin, computeFoodDeliveryEtaMinutes, normalizeLatLng } from '../utils/geo';
 import { emitToPartner, emitToOrder, emitToUser } from '../socket/io';
 import {
+  dispatchCustomerFoodEvent,
+  dispatchDeliveryPartnerFoodEvent,
+  dispatchRestaurantFoodEvent,
+  notifyFoodStakeholdersOnDriverReassign,
+} from './foodNotifications';
+import {
   assertPartnerSubscriptionActive,
   filterSubscribedPartnerIds,
   markPartnerFirstOrderCompleted,
@@ -205,6 +211,11 @@ async function sendToNextRider(orderId: string): Promise<void> {
 
   emitToPartner(riderId, 'delivery:request', payload);
 
+  const orderForNotify = await FoodOrder.findById(orderId);
+  if (orderForNotify) {
+    dispatchDeliveryPartnerFoodEvent(riderId, orderForNotify, 'food_pickup_now');
+  }
+
   if (state.timeout) clearTimeout(state.timeout);
   state.timeout = setTimeout(() => {
     void handleRequestTimeout(orderId, riderId);
@@ -345,6 +356,8 @@ export async function acceptDeliveryRequest(
     status: order.status,
     deliveryStatus: order.deliveryStatus,
   });
+  dispatchCustomerFoodEvent(order, 'driver_assigned');
+  dispatchRestaurantFoodEvent(order, 'driver_assigned');
 
   await markPartnerFirstOrderCompleted(partnerId, 'delivery_partner');
 
@@ -368,6 +381,7 @@ export async function rejectDeliveryRequest(
   await order.save();
 
   if (state) {
+    notifyFoodStakeholdersOnDriverReassign(order);
     state.index += 1;
     await sendToNextRider(orderId);
   }

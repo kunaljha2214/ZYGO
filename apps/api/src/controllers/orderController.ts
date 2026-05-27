@@ -6,6 +6,7 @@ import type { AuthedRequest } from '../middleware/auth';
 import { FoodOrder, type OrderFulfillment } from '../models/FoodOrder';
 import { Restaurant } from '../models/Restaurant';
 import { User } from '../models/User';
+import { ShopReview } from '../models/ShopReview';
 import { generateOrderNumber } from '../utils/geo';
 import { validateShopOffer } from '../services/offerValidation';
 import { buildOrderLines, type OrderLineInput } from '../services/orderLineBuilder';
@@ -32,6 +33,11 @@ import {
   getRestaurantSummaryForListing,
   getRiderDisplayName,
 } from '../services/orderPeerContact';
+import {
+  dispatchRestaurantOrderEvent,
+  notifyFoodStakeholdersOnCustomerCancel,
+} from '../services/orderNotifications';
+import { dispatchRestaurantNotification } from '../services/restaurantNotifications';
 
 type PrepareCheckoutInput = {
   restaurantId: string;
@@ -422,9 +428,74 @@ export async function cancelOrder(
     order.acceptExpiresAt = null;
     await order.save();
     clearRestaurantAcceptTimeout(order._id.toString());
+    notifyFoodStakeholdersOnCustomerCancel(order);
     await refundPaidFoodOrder(order._id.toString());
     const fresh = await FoodOrder.findById(order._id);
     res.json(formatOrder(fresh ?? order));
+  } catch (e) {
+    next(e);
+  }
+}
+
+export async function createOrderReview(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (!req.user) {
+      next(createError(401));
+      return;
+    }
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      next(createError(400, errors.array()[0].msg));
+      return;
+    }
+
+    const order = await FoodOrder.findOne({
+      _id: req.params.id,
+      userId: req.user.sub,
+      status: 'delivered',
+    });
+    if (!order) {
+      next(createError(404, 'Delivered order not found'));
+      return;
+    }
+
+    const existing = await ShopReview.findOne({ orderId: order._id, userId: req.user.sub });
+    if (existing) {
+      next(createError(409, 'Review already submitted for this order'));
+      return;
+    }
+
+    const review = await ShopReview.create({
+      restaurantId: order.restaurantId,
+      userId: req.user.sub,
+      orderId: order._id,
+      rating: Number(req.body.rating),
+      comment: String(req.body.comment ?? '').trim().slice(0, 1000),
+    });
+
+    dispatchRestaurantNotification({
+      restaurantId: order.restaurantId.toString(),
+      type: 'new_review',
+      title: 'New review',
+      body: `You received a ${review.rating} star review.`,
+      extraData: {
+        orderId: order._id.toString(),
+        reviewId: review._id.toString(),
+      },
+    });
+
+    res.status(201).json({
+      review: {
+        id: review._id.toString(),
+        rating: review.rating,
+        comment: review.comment,
+        createdAt: review.createdAt,
+      },
+    });
   } catch (e) {
     next(e);
   }

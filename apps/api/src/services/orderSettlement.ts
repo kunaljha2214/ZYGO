@@ -5,6 +5,10 @@ import { DeliveryEarning } from '../models/DeliveryEarning';
 import { DeliveryPartnerProfile } from '../models/DeliveryPartnerProfile';
 import { RestaurantEarning } from '../models/RestaurantEarning';
 import { User } from '../models/User';
+import {
+  dispatchDeliveryPartnerFoodEvent,
+  dispatchRestaurantFoodEvent,
+} from './foodNotifications';
 
 /** Credit partner wallets when delivery completes (manual weekly payout later). */
 export async function settleFoodOrderOnDelivered(order: IFoodOrder): Promise<void> {
@@ -63,4 +67,10 @@ export async function settleFoodOrderOnDelivered(order: IFoodOrder): Promise<voi
     { _id: order._id },
     { settlementCompletedAt: new Date() }
   );
+  dispatchRestaurantFoodEvent(order, 'order_completed', { amount: restaurantAmount });
+  if (order.deliveryPartnerId) {
+    dispatchDeliveryPartnerFoodEvent(order.deliveryPartnerId, order, 'delivery_earnings', {
+      earnings: riderAmount,
+    });
+  }
 }

@@ -24,6 +24,11 @@ import {
 } from '../services/orderPeerContact';
 import { clearRestaurantAcceptTimeout } from '../services/orderAcceptTimeout';
 import { refundPaidFoodOrder } from '../services/orderRefund';
+import {
+  dispatchCustomerFoodEvent,
+  dispatchRestaurantFoodEvent,
+} from '../services/foodNotifications';
+import { settleFoodOrderOnDelivered } from '../services/orderSettlement';
 
 function formatShopOrder(o: Record<string, unknown>) {
   const items = o.items as { name: string; price: number; quantity: number }[];
@@ -291,6 +296,7 @@ export async function acceptOrder(
     await order.save();
     clearRestaurantAcceptTimeout(order._id.toString());
     await markPartnerFirstOrderCompleted(req.user!.sub, 'shop_owner');
+    dispatchCustomerFoodEvent(order, 'order_accepted');
     res.json(await formatShopOrderWithCustomer(order));
   } catch (e) {
     next(e);
@@ -318,6 +324,7 @@ export async function rejectOrder(
     order.acceptExpiresAt = null;
     await order.save();
     clearRestaurantAcceptTimeout(order._id.toString());
+    dispatchCustomerFoodEvent(order, 'order_rejected', { reason: order.rejectReason });
     await refundPaidFoodOrder(order._id.toString());
     const fresh = await FoodOrder.findById(order._id);
     res.json(
@@ -346,6 +353,7 @@ export async function advanceOrderStatus(
     }
     order.status = target;
     if (target === 'preparing' && !order.acceptedAt) order.acceptedAt = new Date();
+    if (target === 'preparing') dispatchCustomerFoodEvent(order, 'food_preparing');
     if (target === 'ready_for_pickup') {
       order.readyAt = new Date();
       await order.save();
@@ -354,7 +362,11 @@ export async function advanceOrderStatus(
       });
     }
     if (target === 'out_for_delivery') order.outForDeliveryAt = new Date();
-    if (target === 'delivered') order.deliveredAt = new Date();
+    if (target === 'delivered') {
+      order.deliveredAt = new Date();
+      await settleFoodOrderOnDelivered(order);
+      dispatchCustomerFoodEvent(order, 'order_delivered');
+    }
     await refreshDelayAndStation(order, restaurantId);
     res.json(await formatShopOrderWithCustomer(order));
   } catch (e) {

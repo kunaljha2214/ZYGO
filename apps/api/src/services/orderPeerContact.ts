@@ -35,6 +35,7 @@ const DELIVERY_PARTNER_CONTACT_STATUSES = new Set([
   'arriving_at_restaurant',
   'picked_up',
   'out_for_delivery',
+  'arrived_at_customer',
   'delivered',
 ]);
 

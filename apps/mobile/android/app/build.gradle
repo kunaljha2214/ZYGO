@@ -2,6 +2,13 @@ apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
+def googleServicesJson = file("google-services.json")
+if (googleServicesJson.exists()) {
+    apply plugin: "com.google.gms.google-services"
+} else {
+    logger.warn("[firebase] google-services.json missing; FCM will be disabled until it is added.")
+}
+
 // apps/mobile/.env (relative to android/app)
 project.ext.envConfigFiles = [
     debug: "../../.env",

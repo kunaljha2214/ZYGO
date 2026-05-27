@@ -4,6 +4,10 @@ import { FoodOrder } from '../models/FoodOrder';
 import { ShopOffer } from '../models/ShopOffer';
 import { emitToUser } from '../socket/io';
 import { scheduleRestaurantAcceptTimeout } from './orderAcceptTimeout';
+import {
+  dispatchCustomerOrderEvent,
+  dispatchRestaurantOrderEvent,
+} from './orderNotifications';
 
 export async function markFoodOrderPaid(
   orderId: string,
@@ -36,6 +40,10 @@ export async function markFoodOrderPaid(
     status: order.status,
     paymentStatus: order.paymentStatus,
   });
+  dispatchCustomerOrderEvent(order, 'payment_success');
+  dispatchCustomerOrderEvent(order, 'order_placed');
+  dispatchRestaurantOrderEvent(order, 'new_order');
+  dispatchRestaurantOrderEvent(order, 'order_paid');
 
   if (order.status === 'placed') {
     void scheduleRestaurantAcceptTimeout(order._id.toString());
