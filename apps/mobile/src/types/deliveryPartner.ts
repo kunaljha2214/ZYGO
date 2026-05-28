@@ -55,6 +55,8 @@ export type PartnerOrder = {
   restaurantCoords?: { lat: number; lng: number };
   estimatedRiderEarnings?: number;
   deliveryEtaMinutes?: number;
+  handoffConfirmedAt?: string | null;
+  deliveryOtpVerifiedAt?: string | null;
   createdAt: string;
   customer?: { id: string; name: string } | null;
 };

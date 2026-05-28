@@ -147,16 +147,26 @@ export async function getRide(
     const ride = await RideBooking.findOne({
       _id: req.params.id,
       userId: req.user.sub,
-    });
+    }).select('+rideOtpCode rideOtpExpiresAt rideOtpVerifiedAt');
     if (!ride) {
       next(createError(404));
       return;
     }
     await syncLegacyRidePaymentStatus(ride);
     const captain = await getCaptainDisplayName(ride.captainId);
+    const otpCode = (ride as unknown as { rideOtpCode?: string | null }).rideOtpCode ?? null;
+    const otpExpiresAt = (ride as unknown as { rideOtpExpiresAt?: Date | null }).rideOtpExpiresAt;
+    const otpVerifiedAt = (ride as unknown as { rideOtpVerifiedAt?: Date | null }).rideOtpVerifiedAt;
+    const otpActive =
+      ride.status === 'in_progress' &&
+      !otpVerifiedAt &&
+      otpCode &&
+      otpExpiresAt &&
+      otpExpiresAt.getTime() > Date.now();
     res.json({
       ...formatRideLean(ride.toObject() as unknown as Record<string, unknown>),
       captain,
+      ...(otpActive ? { rideOtp: otpCode, rideOtpExpiresAt: otpExpiresAt } : {}),
     });
   } catch (e) {
     next(e);

@@ -69,3 +69,8 @@ export async function retryShopOrderRiderDispatch(orderId: string) {
   const { data } = await api.post<ShopOrder>(`/shop/orders/${orderId}/retry-rider-dispatch`);
   return data;
 }
+
+export async function confirmShopOrderHandoff(orderId: string) {
+  const { data } = await api.post<ShopOrder>(`/shop/orders/${orderId}/handoff`);
+  return data;
+}

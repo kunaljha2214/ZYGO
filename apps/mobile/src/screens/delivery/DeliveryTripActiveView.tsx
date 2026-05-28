@@ -1,24 +1,26 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, Linking } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Linking, TextInput } from 'react-native';
 import Geolocation from '@react-native-community/geolocation';
 import { AppAlert } from '../../alert';
 import { AppScreen } from '../../components/layout/AppScreen';
 import { GlassCard } from '../../components/neon/GlassCard';
 import { Button } from '../../components/Button';
 import { DeliveryStatusPills } from '../../components/delivery/DeliveryStatusPills';
-import { advanceDelivery, updatePartnerLocation } from '../../api/deliveryPartner';
+import { advanceDelivery, updatePartnerLocation, verifyDeliveryOtp } from '../../api/deliveryPartner';
 import type { PartnerOrder } from '../../types/deliveryPartner';
 import { colors, radii, spacing } from '../../theme';
 import { formatInr } from '../../utils/formatMoney';
 import { drivingDirectionsUrl } from '../../utils/navigationUrl';
 import { TripContactCard } from '../../components/trip/TripContactCard';
 import { callDeliveryOrderCustomer } from '../../utils/placePeerCall';
+import { distanceMeters } from '../../utils/addressDisplay';
 
 const CUSTOMER_CONTACT_STATUSES = new Set([
   'accepted',
   'arriving_at_restaurant',
   'picked_up',
   'out_for_delivery',
+  'arrived_at_customer',
   'delivered',
 ]);
 
@@ -27,6 +29,7 @@ const STATUS_LABELS: Record<string, string> = {
   arriving_at_restaurant: 'Arriving at restaurant',
   picked_up: 'Picked up',
   out_for_delivery: 'Out for delivery',
+  arrived_at_customer: 'Arrived at customer',
   delivered: 'Delivered',
 };
 
@@ -34,7 +37,8 @@ const NEXT_LABEL: Record<string, string> = {
   accepted: 'Arriving at restaurant',
   arriving_at_restaurant: 'Picked up',
   picked_up: 'Out for delivery',
-  out_for_delivery: 'Delivered',
+  out_for_delivery: 'Arrived at customer',
+  arrived_at_customer: 'Delivered',
 };
 
 type Props = {
@@ -45,6 +49,9 @@ type Props = {
 export function DeliveryTripActiveView({ order, onOrderUpdated }: Props) {
   const [busy, setBusy] = React.useState(false);
   const [current, setCurrent] = React.useState(order);
+  const [pos, setPos] = React.useState<{ lat: number; lng: number } | null>(null);
+  const [otp, setOtp] = React.useState('');
+  const [otpBusy, setOtpBusy] = React.useState(false);
 
   useEffect(() => {
     setCurrent(order);
@@ -56,6 +63,7 @@ export function DeliveryTripActiveView({ order, onOrderUpdated }: Props) {
     const status = current.deliveryStatus;
     const tick = () => {
       Geolocation.getCurrentPosition((pos) => {
+        setPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         void updatePartnerLocation(pos.coords.latitude, pos.coords.longitude, orderId);
       });
     };
@@ -87,13 +95,77 @@ export function DeliveryTripActiveView({ order, onOrderUpdated }: Props) {
   const drop = current.deliveryAddress.coordinates;
   const nextLabel = NEXT_LABEL[current.deliveryStatus];
   const navTarget =
-    current.deliveryStatus === 'picked_up' || current.deliveryStatus === 'out_for_delivery'
+    current.deliveryStatus === 'picked_up' ||
+    current.deliveryStatus === 'out_for_delivery' ||
+    current.deliveryStatus === 'arrived_at_customer'
       ? drop
       : rest;
   const navLabel =
-    current.deliveryStatus === 'picked_up' || current.deliveryStatus === 'out_for_delivery'
+    current.deliveryStatus === 'picked_up' ||
+    current.deliveryStatus === 'out_for_delivery' ||
+    current.deliveryStatus === 'arrived_at_customer'
       ? 'Customer'
       : current.restaurantName ?? 'Restaurant';
+
+  const GEOFENCE_M = 50;
+  const distToRest = pos ? distanceMeters(pos, rest) : null;
+  const distToDrop = pos ? distanceMeters(pos, drop) : null;
+  const isNearRest = distToRest != null && distToRest <= GEOFENCE_M;
+  const isNearDrop = distToDrop != null && distToDrop <= GEOFENCE_M;
+  const needsHandoff =
+    current.deliveryStatus === 'arriving_at_restaurant' && !current.handoffConfirmedAt;
+  const needsOtp =
+    current.deliveryStatus === 'arrived_at_customer' && !current.deliveryOtpVerifiedAt;
+
+  const canMarkNext =
+    !busy &&
+    Boolean(nextLabel) &&
+    (current.deliveryStatus === 'accepted'
+      ? isNearRest
+      : current.deliveryStatus === 'arriving_at_restaurant'
+        ? isNearRest && !needsHandoff
+        : current.deliveryStatus === 'out_for_delivery'
+          ? isNearDrop
+          : current.deliveryStatus === 'arrived_at_customer'
+            ? isNearDrop && !needsOtp
+          : current.deliveryStatus === 'picked_up'
+            ? true
+            : true);
+
+  const disabledHint = !pos
+    ? 'Enable GPS to continue.'
+    : current.deliveryStatus === 'accepted' && !isNearRest
+      ? `Get within ${GEOFENCE_M}m of the restaurant to mark arrival.`
+      : current.deliveryStatus === 'arriving_at_restaurant' && !isNearRest
+        ? `Get within ${GEOFENCE_M}m of the restaurant to pick up.`
+        : needsHandoff
+          ? 'Waiting for restaurant to confirm handoff.'
+          : needsOtp
+            ? 'Enter customer OTP to complete delivery.'
+      : (current.deliveryStatus === 'out_for_delivery' || current.deliveryStatus === 'arrived_at_customer') && !isNearDrop
+        ? `Get within ${GEOFENCE_M}m of the customer address to continue.`
+            : null;
+
+  const submitOtp = async () => {
+    if (!current?.id) return;
+    const code = otp.trim();
+    if (!/^[0-9]{4}$/.test(code)) {
+      AppAlert.alert('OTP', 'Enter the 4-digit OTP from the customer.');
+      return;
+    }
+    setOtpBusy(true);
+    try {
+      await verifyDeliveryOtp(current.id, code);
+      const updated = { ...current, deliveryOtpVerifiedAt: new Date().toISOString() };
+      setCurrent(updated);
+      onOrderUpdated(updated);
+      AppAlert.alert('OTP verified', 'You can now complete delivery.');
+    } catch (e) {
+      AppAlert.alert('OTP', e instanceof Error ? e.message : 'Could not verify OTP');
+    } finally {
+      setOtpBusy(false);
+    }
+  };
 
   return (
     <AppScreen tab scroll eyebrow="Delivery" title="Your trip" subtitle="Active delivery">
@@ -164,8 +236,33 @@ export function DeliveryTripActiveView({ order, onOrderUpdated }: Props) {
         <Text style={styles.mapsBtnText}>Open navigation</Text>
       </Pressable>
 
+      {current.deliveryStatus === 'arrived_at_customer' && !current.deliveryOtpVerifiedAt ? (
+        <GlassCard style={styles.otpCard}>
+          <Text style={styles.cardLabel}>Delivery OTP</Text>
+          <TextInput
+            value={otp}
+            onChangeText={setOtp}
+            placeholder="Enter 4-digit OTP"
+            placeholderTextColor={colors.textMuted}
+            keyboardType="number-pad"
+            maxLength={4}
+            style={styles.otpInput}
+          />
+          <Button title="Verify OTP" onPress={() => void submitOtp()} loading={otpBusy} />
+        </GlassCard>
+      ) : null}
+
+      {disabledHint && !canMarkNext && nextLabel ? (
+        <Text style={styles.disabledHint}>{disabledHint}</Text>
+      ) : null}
+
       {current.deliveryStatus !== 'delivered' && nextLabel ? (
-        <Button title={`Mark: ${nextLabel}`} onPress={() => void advance()} loading={busy} />
+        <Button
+          title={`Mark: ${nextLabel}`}
+          onPress={() => void advance()}
+          loading={busy}
+          disabled={!canMarkNext}
+        />
       ) : null}
     </AppScreen>
   );
@@ -226,4 +323,19 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   mapsBtnText: { color: colors.primaryBright, fontWeight: '800' },
+  disabledHint: { color: '#fbbf24', fontWeight: '700', marginBottom: spacing.md, lineHeight: 20 },
+  otpCard: { marginBottom: spacing.md, padding: spacing.md },
+  otpInput: {
+    marginTop: 8,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: colors.chipBorder,
+    borderRadius: radii.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: 2,
+  },
 });

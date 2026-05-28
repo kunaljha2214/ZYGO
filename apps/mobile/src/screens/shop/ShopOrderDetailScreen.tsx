@@ -16,6 +16,7 @@ import {
   acceptShopOrder,
   advanceShopOrderStatus,
   retryShopOrderRiderDispatch,
+  confirmShopOrderHandoff,
   fetchShopOrder,
   printShopInvoice,
   rejectShopOrder,
@@ -157,6 +158,16 @@ export function ShopOrderDetailScreen() {
             />
           ) : null}
         </View>
+      ) : null}
+
+      {order.status === 'ready_for_pickup' && !order.handoffConfirmedAt ? (
+        <Button
+          title="Handed to rider"
+          variant="ghost"
+          onPress={() => void run(() => confirmShopOrderHandoff(orderId))}
+          loading={busy}
+          style={{ marginTop: 0 }}
+        />
       ) : null}
 
       {order.customer && CUSTOMER_CONTACT_STATUSES.has(order.status) ? (

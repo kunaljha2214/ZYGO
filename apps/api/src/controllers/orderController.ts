@@ -299,6 +299,7 @@ export async function getOrder(
       userId: req.user.sub,
     })
       .populate('restaurantId', 'name location')
+      .select('+deliveryOtpCode deliveryOtpExpiresAt deliveryOtpVerifiedAt')
       .lean();
     if (!order) {
       next(createError(404));
@@ -319,7 +320,27 @@ export async function getOrder(
         }
       );
     }
-    res.json({ ...formatted, restaurant, rider });
+    const otpCode = (order as unknown as { deliveryOtpCode?: string | null }).deliveryOtpCode ?? null;
+    const otpExpiresAt = (order as unknown as { deliveryOtpExpiresAt?: Date | null })
+      .deliveryOtpExpiresAt;
+    const otpVerifiedAt = (order as unknown as { deliveryOtpVerifiedAt?: Date | null })
+      .deliveryOtpVerifiedAt;
+
+    const otpActive =
+      !otpVerifiedAt &&
+      otpCode &&
+      otpExpiresAt &&
+      otpExpiresAt.getTime() > Date.now() &&
+      (formatted.deliveryStatus === 'arrived_at_customer' ||
+        formatted.deliveryStatus === 'out_for_delivery' ||
+        formatted.status === 'out_for_delivery');
+
+    res.json({
+      ...formatted,
+      restaurant,
+      rider,
+      ...(otpActive ? { deliveryOtp: otpCode, deliveryOtpExpiresAt: otpExpiresAt } : {}),
+    });
   } catch (e) {
     next(e);
   }

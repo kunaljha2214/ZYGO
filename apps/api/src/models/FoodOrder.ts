@@ -100,9 +100,17 @@ export interface IFoodOrder extends Document {
   restaurantName?: string;
   restaurantCoords?: { lat: number; lng: number };
   riderAssignedAt?: Date;
+  /** Shop confirms food handed to rider. */
+  handoffConfirmedAt?: Date | null;
   pickedUpAt?: Date;
   riderLastLocation?: { lat: number; lng: number };
   deliveryEtaMinutes?: number;
+  /** OTP required to complete delivery (shown to customer only). */
+  deliveryOtpCode?: string | null;
+  deliveryOtpHash?: string | null;
+  deliveryOtpSalt?: string | null;
+  deliveryOtpExpiresAt?: Date | null;
+  deliveryOtpVerifiedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -213,12 +221,18 @@ const FoodOrderSchema = new Schema<IFoodOrder>(
     },
     deliveryPartnerId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
     riderAssignedAt: { type: Date },
+    handoffConfirmedAt: { type: Date, default: null },
     pickedUpAt: { type: Date },
     riderLastLocation: {
       lat: { type: Number },
       lng: { type: Number },
     },
     deliveryEtaMinutes: { type: Number, min: 1, max: 180 },
+    deliveryOtpCode: { type: String, default: null, select: false },
+    deliveryOtpHash: { type: String, default: null, select: false },
+    deliveryOtpSalt: { type: String, default: null, select: false },
+    deliveryOtpExpiresAt: { type: Date, default: null },
+    deliveryOtpVerifiedAt: { type: Date, default: null },
     deliveryAddress: { type: DeliveryAddressSchema, required: true },
     customerNotes: { type: String, maxlength: 500 },
     shopNotes: { type: String, maxlength: 500 },

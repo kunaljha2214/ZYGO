@@ -43,6 +43,7 @@ r.get('/active', driverOnly, wrap(dr.getActiveRide));
 r.post('/rides/:rideId/accept', driverOnly, wrap(dr.acceptRequest));
 r.post('/rides/:rideId/reject', driverOnly, wrap(dr.rejectRequest));
 r.patch('/rides/:rideId/status', driverOnly, wrap(dr.advanceRideStatus));
+r.post('/rides/:rideId/otp/verify', driverOnly, [body('otp').isString().trim().notEmpty()], wrap(dr.verifyRideOtp));
 r.get('/rides/:rideId/contact', driverOnly, wrap(dr.getRideCustomerContact));
 r.get('/earnings', driverOnly, wrap(dr.getEarningsDashboard));
 r.get('/history', driverOnly, wrap(dr.getRideHistory));

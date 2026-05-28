@@ -23,6 +23,9 @@ import {
   getCustomerContactForCaptain,
   getCustomerDisplayName,
 } from '../services/ridePeerContact';
+import { assertCanAdvanceRideStatus } from '../services/statusMachines/rideStatusMachine';
+import { creditDriverWalletForRide } from '../services/ridePayment';
+import { generateOtp4, hashOtp, randomSalt } from '../utils/otp';
 
 const DOC_TYPES = ['aadhaar', 'pan', 'driving_license', 'rc', 'insurance', 'selfie'] as const;
 
@@ -295,29 +298,20 @@ export async function rejectRequest(req: AuthedRequest, res: Response, next: Nex
   }
 }
 
-const STATUS_FLOW: RideStatus[] = ['assigned', 'arriving', 'arrived', 'in_progress', 'completed'];
-
-function nextRideStatus(current: RideStatus): RideStatus | null {
-  const idx = STATUS_FLOW.indexOf(current);
-  if (idx < 0 || idx >= STATUS_FLOW.length - 1) return null;
-  return STATUS_FLOW[idx + 1];
-}
-
 export async function advanceRideStatus(req: AuthedRequest, res: Response, next: NextFunction) {
   try {
     const ride = await RideBooking.findOne({
       _id: req.params.rideId,
       captainId: req.user!.sub,
-    });
+    }).select('+rideOtpCode +rideOtpHash +rideOtpSalt +rideOtpExpiresAt +rideOtpVerifiedAt');
     if (!ride) {
       next(createError(404));
       return;
     }
-    const target = (req.body.status as RideStatus) || nextRideStatus(ride.status);
-    if (!target || !STATUS_FLOW.includes(target)) {
-      next(createError(400, 'Cannot advance ride status'));
-      return;
-    }
+    const { target } = await assertCanAdvanceRideStatus(ride, {
+      driverId: req.user!.sub,
+      requestedTarget: req.body.status as RideStatus | undefined,
+    });
 
     ride.status = target;
 
@@ -328,12 +322,27 @@ export async function advanceRideStatus(req: AuthedRequest, res: Response, next:
       await dispatchCustomerRideEvent(ride, 'driver_arrived');
     }
     if (target === 'in_progress') {
+      if (!ride.rideOtpVerifiedAt && !ride.rideOtpHash) {
+        const otp = generateOtp4();
+        const salt = randomSalt();
+        ride.rideOtpCode = otp;
+        ride.rideOtpSalt = salt;
+        ride.rideOtpHash = hashOtp(otp, salt);
+        ride.rideOtpExpiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
+        emitToUser(ride.userId.toString(), 'ride:otp', {
+          rideId: ride._id.toString(),
+          otp,
+          expiresAt: ride.rideOtpExpiresAt.toISOString(),
+        });
+      }
       await dispatchCustomerRideEvent(ride, 'ride_started');
     }
 
     if (target === 'completed') {
-      ride.paymentStatus = 'pending';
+      ride.paymentStatus = 'paid';
+      ride.paidAt = new Date();
       ride.driverEarningsSettled = false;
+      ride.rideOtpCode = null;
       const profile = await DriverProfile.findOne({ driverId: req.user!.sub });
       if (profile) {
         profile.totalRides += 1;
@@ -347,6 +356,7 @@ export async function advanceRideStatus(req: AuthedRequest, res: Response, next:
       await dispatchDriverRideEvent(req.user!.sub, ride, 'ride_completed_earnings', {
         earnings: ride.driverEarned ?? ride.estimatedDriverEarnings,
       });
+      await creditDriverWalletForRide(ride);
     }
 
     await ride.save();
@@ -355,12 +365,65 @@ export async function advanceRideStatus(req: AuthedRequest, res: Response, next:
       rideId: ride._id.toString(),
       status: ride.status,
       driverLastLocation: ride.driverLastLocation,
+      paymentStatus: ride.paymentStatus,
     };
     emitToUser(ride.userId.toString(), 'ride:status', payload);
+    emitToUser(req.user!.sub, 'ride:status', payload);
 
     res.json({
       ride: await formatDriverRide(ride.toObject() as unknown as Record<string, unknown>),
     });
+  } catch (e) {
+    next(e);
+  }
+}
+
+export async function verifyRideOtp(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const otp = String(req.body.otp ?? '').trim();
+    if (!/^[0-9]{4}$/.test(otp)) {
+      next(createError(400, 'Invalid OTP'));
+      return;
+    }
+    const ride = await RideBooking.findOne({
+      _id: req.params.rideId,
+      captainId: req.user!.sub,
+    }).select('+rideOtpHash +rideOtpSalt +rideOtpExpiresAt +rideOtpVerifiedAt +rideOtpCode');
+    if (!ride) {
+      next(createError(404));
+      return;
+    }
+    if (ride.rideOtpVerifiedAt) {
+      res.json({ ok: true, verifiedAt: ride.rideOtpVerifiedAt.toISOString() });
+      return;
+    }
+    if (!ride.rideOtpHash || !ride.rideOtpSalt) {
+      next(createError(400, 'OTP not generated yet'));
+      return;
+    }
+    if (ride.rideOtpExpiresAt && ride.rideOtpExpiresAt.getTime() < Date.now()) {
+      next(createError(400, 'OTP expired. Ask customer to refresh ride tracking.'));
+      return;
+    }
+    const actual = hashOtp(otp, ride.rideOtpSalt);
+    if (actual !== ride.rideOtpHash) {
+      next(createError(403, 'Incorrect OTP'));
+      return;
+    }
+    ride.rideOtpVerifiedAt = new Date();
+    ride.rideOtpCode = null;
+    await ride.save();
+    const payload = {
+      rideId: ride._id.toString(),
+      rideOtpVerifiedAt: ride.rideOtpVerifiedAt.toISOString(),
+    };
+    emitToUser(ride.userId.toString(), 'ride:otp_verified', payload);
+    emitToUser(req.user!.sub, 'ride:otp_verified', payload);
+    res.json({ ok: true, verifiedAt: payload.rideOtpVerifiedAt });
   } catch (e) {
     next(e);
   }

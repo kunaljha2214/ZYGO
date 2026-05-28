@@ -33,6 +33,8 @@ type Ride = {
   durationMin?: number;
   status: string;
   paymentStatus?: string;
+  rideOtp?: string;
+  rideOtpExpiresAt?: string;
   driverLastLocation?: { lat: number; lng: number } | null;
   captain?: { id: string; name: string } | null;
 };
@@ -76,11 +78,20 @@ export function RideTrackScreen() {
     if (!data || !LIVE_STATUSES.has(data.status)) return;
     const socket = connectRideTracking(rideId);
     onDriverLocation(onDriverLocationUpdate);
+    const onStatus = () => void qc.invalidateQueries({ queryKey: ['ride', rideId] });
+    socket.on('ride:status', onStatus);
+    const onOtp = () => void qc.invalidateQueries({ queryKey: ['ride', rideId] });
+    socket.on('ride:otp', onOtp);
+    const onOtpVerified = () => void qc.invalidateQueries({ queryKey: ['ride', rideId] });
+    socket.on('ride:otp_verified', onOtpVerified);
     return () => {
       offDriverLocation(onDriverLocationUpdate);
+      socket.off('ride:status', onStatus);
+      socket.off('ride:otp', onOtp);
+      socket.off('ride:otp_verified', onOtpVerified);
       disconnectRideTracking();
     };
-  }, [rideId, data?.status, onDriverLocationUpdate]);
+  }, [rideId, data?.status, onDriverLocationUpdate, qc]);
 
   useEffect(() => {
     if (data?.driverLastLocation) {
@@ -149,6 +160,14 @@ export function RideTrackScreen() {
         </Text>
       ) : null}
       <StatusStepper kind="ride" status={data.status} />
+
+      {data.rideOtp ? (
+        <Card glow style={shared.block}>
+          <Text style={shared.h}>Ride OTP</Text>
+          <Text style={styles.otpCode}>{data.rideOtp}</Text>
+          <Text style={styles.otpHint}>Share this OTP with your captain to finish the ride.</Text>
+        </Card>
+      ) : null}
 
       <View
         onTouchStart={() => setMapGestureActive(true)}
@@ -228,6 +247,8 @@ const styles = StyleSheet.create({
     marginVertical: 12,
   },
   eta: { color: colors.primaryBright, fontWeight: '700', marginBottom: 8 },
+  otpCode: { color: colors.lavender, fontSize: 32, fontWeight: '900', letterSpacing: 4, marginTop: 6 },
+  otpHint: { color: colors.textMuted, fontSize: 13, lineHeight: 18, marginTop: 8 },
   mapWrap: {
     height: mapH,
     marginVertical: 12,

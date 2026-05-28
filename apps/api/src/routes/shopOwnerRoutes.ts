@@ -81,6 +81,7 @@ r.post(
 );
 r.patch('/orders/:id/status', shopOnly, wrap(shopOrders.advanceOrderStatus));
 r.post('/orders/:id/retry-rider-dispatch', shopOnly, wrap(shopOrders.retryOrderRiderDispatch));
+r.post('/orders/:id/handoff', shopOnly, wrap(shopOrders.confirmOrderHandoffToRider));
 r.patch('/orders/:id/notes', shopOnly, wrap(shopOrders.updateShopOrderNotes));
 r.post('/orders/:id/print-invoice', shopOnly, wrap(shopOrders.markInvoicePrinted));
 

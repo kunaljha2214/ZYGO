@@ -66,6 +66,7 @@ export type DriverRide = {
   tollCharges?: number;
   status: string;
   estimatedDriverEarnings?: number;
+  rideOtpVerifiedAt?: string | null;
   createdAt: string;
   customer?: RidePeerSummary | null;
 };

@@ -67,6 +67,8 @@ type FoodOrder = {
   acceptExpiresAt?: string | null;
   deliveryStatus?: string;
   deliveryEtaMinutes?: number;
+  deliveryOtp?: string;
+  deliveryOtpExpiresAt?: string;
   deliveryAddress: { label: string; line1: string; coordinates?: { lat: number; lng: number } };
   riderLocation?: { lat: number; lng: number } | null;
 };
@@ -128,6 +130,8 @@ export function OrderTrackScreen() {
 
     const socket = connectOrderTracking(orderId);
     socket.on('rider:location', onRiderLocation);
+    const onOtp = () => void qc.invalidateQueries({ queryKey: ['order', orderId] });
+    socket.on('order:otp', onOtp);
     const unbindDelivery = bindOrderDeliveryEvents(socket, {
       onDispatching: () => void qc.invalidateQueries({ queryKey: ['order', orderId] }),
       onNoRider: () => void qc.invalidateQueries({ queryKey: ['order', orderId] }),
@@ -135,6 +139,7 @@ export function OrderTrackScreen() {
     });
     return () => {
       socket.off('rider:location', onRiderLocation);
+      socket.off('order:otp', onOtp);
       unbindDelivery();
       disconnectOrderTracking();
     };
@@ -218,6 +223,14 @@ export function OrderTrackScreen() {
       ) : null}
       <StatusStepper kind="food" status={data.status} />
 
+      {data.deliveryOtp ? (
+        <Card glow style={shared.block}>
+          <Text style={shared.h}>Delivery OTP</Text>
+          <Text style={styles.otpCode}>{data.deliveryOtp}</Text>
+          <Text style={styles.otpHint}>Share this OTP with your delivery partner to complete delivery.</Text>
+        </Card>
+      ) : null}
+
       {data.restaurant && RESTAURANT_CONTACT_STATUSES.has(data.status) ? (
         <TripContactCard
           title="Restaurant"
@@ -300,6 +313,8 @@ const styles = StyleSheet.create({
   acceptWindow: { color: colors.primaryBright, fontWeight: '600', marginBottom: 8 },
   riderSearchInfo: { color: colors.primaryBright, fontWeight: '600', marginBottom: 8, lineHeight: 20 },
   riderSearchWarn: { color: '#fbbf24', fontWeight: '600', marginBottom: 8, lineHeight: 20 },
+  otpCode: { color: colors.lavender, fontSize: 32, fontWeight: '900', letterSpacing: 4, marginTop: 6 },
+  otpHint: { color: colors.textMuted, fontSize: 13, lineHeight: 18, marginTop: 8 },
   cancelReason: { color: colors.error, fontWeight: '600', marginBottom: 8 },
   refunded: { color: colors.primaryBright, fontWeight: '600', marginBottom: 8 },
   mapWrap: {

@@ -36,6 +36,7 @@ r.get('/active', partnerOnly, wrap(dp.getActiveDelivery));
 r.post('/orders/:orderId/accept', partnerOnly, wrap(dp.acceptRequest));
 r.post('/orders/:orderId/reject', partnerOnly, wrap(dp.rejectRequest));
 r.patch('/orders/:orderId/status', partnerOnly, wrap(dp.advanceDeliveryStatus));
+r.post('/orders/:orderId/otp/verify', partnerOnly, [body('otp').isString().trim().notEmpty()], wrap(dp.verifyDeliveryOtp));
 r.get('/orders/:orderId/contact/customer', partnerOnly, wrap(dp.getDeliveryOrderCustomerContact));
 r.get('/earnings', partnerOnly, wrap(dp.getEarningsDashboard));
 r.get('/history', partnerOnly, wrap(dp.getDeliveryHistory));

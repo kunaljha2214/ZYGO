@@ -45,6 +45,12 @@ export interface IRideBooking extends Document {
   paidAt?: Date;
   /** Captain wallet credited after customer pays. */
   driverEarningsSettled: boolean;
+  /** Ride delivery verification OTP (shown to customer only). */
+  rideOtpCode?: string | null;
+  rideOtpHash?: string | null;
+  rideOtpSalt?: string | null;
+  rideOtpExpiresAt?: Date | null;
+  rideOtpVerifiedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -112,6 +118,11 @@ const RideBookingSchema = new Schema<IRideBooking>(
     razorpayPaymentId: { type: String, sparse: true },
     paidAt: { type: Date },
     driverEarningsSettled: { type: Boolean, default: false },
+    rideOtpCode: { type: String, default: null, select: false },
+    rideOtpHash: { type: String, default: null, select: false },
+    rideOtpSalt: { type: String, default: null, select: false },
+    rideOtpExpiresAt: { type: Date, default: null },
+    rideOtpVerifiedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

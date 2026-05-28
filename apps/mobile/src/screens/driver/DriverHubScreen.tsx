@@ -31,6 +31,7 @@ import { useDriverRequestStore } from '../../store/driverRequestStore';
 import type { DriverPartnerStackParamList } from '../../navigation/types';
 import { colors, spacing } from '../../theme';
 import { formatInr } from '../../utils/formatMoney';
+import { startBackgroundLocation, stopBackgroundLocation } from '../../services/backgroundLocation';
 
 type Nav = NativeStackNavigationProp<DriverPartnerStackParamList>;
 
@@ -184,8 +185,10 @@ export function DriverHubScreen() {
             if (req) setIncoming(req);
           });
           pushLocation();
+          await startBackgroundLocation('driver');
         } else {
           setIncoming(null);
+          await stopBackgroundLocation();
         }
       } catch (e) {
         setOnline(previous);

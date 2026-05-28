@@ -31,6 +31,7 @@ import {
   dispatchRestaurantFoodEvent,
 } from '../services/foodNotifications';
 import { settleFoodOrderOnDelivered } from '../services/orderSettlement';
+import { emitToOrder, emitToUser } from '../socket/io';
 
 function formatShopOrder(o: Record<string, unknown>) {
   const items = o.items as { name: string; price: number; quantity: number }[];
@@ -53,6 +54,7 @@ function formatShopOrder(o: Record<string, unknown>) {
     delayRiskMinutes: o.delayRiskMinutes ?? null,
     invoicePrintedAt: o.invoicePrintedAt ?? null,
     acceptedAt: o.acceptedAt ?? null,
+    handoffConfirmedAt: o.handoffConfirmedAt ?? null,
     createdAt: o.createdAt,
     updatedAt: o.updatedAt,
     nextAction: nextStatus(o.status as string),
@@ -367,6 +369,38 @@ export async function retryOrderRiderDispatch(
     });
     const fresh = await FoodOrder.findById(order._id);
     res.json(await formatShopOrderWithCustomer(fresh ?? order));
+  } catch (e) {
+    next(e);
+  }
+}
+
+/** Shop owner: confirm that food was handed to the assigned rider. */
+export async function confirmOrderHandoffToRider(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const { order } = await getOwnerOrder(req, req.params.id);
+    if (order.status !== 'ready_for_pickup') {
+      next(createError(400, 'Order must be ready for pickup first'));
+      return;
+    }
+    if (!order.deliveryPartnerId) {
+      next(createError(400, 'No rider assigned for this order'));
+      return;
+    }
+    order.handoffConfirmedAt = new Date();
+    await order.save();
+
+    const payload = {
+      orderId: order._id.toString(),
+      handoffConfirmedAt: order.handoffConfirmedAt?.toISOString?.() ?? new Date().toISOString(),
+    };
+    emitToOrder(order._id.toString(), 'delivery:handoff_confirmed', payload);
+    emitToUser(order.userId.toString(), 'order:updated', payload);
+    emitToUser(order.deliveryPartnerId.toString(), 'delivery:handoff_confirmed', payload);
+    res.json(await formatShopOrderWithCustomer(order));
   } catch (e) {
     next(e);
   }

@@ -52,6 +52,12 @@ export function RestaurantListCard({
             <Text style={styles.cuisines} numberOfLines={2}>
               {cuisineLine(cuisines)}
             </Text>
+            {distanceKm != null ? (
+              <>
+                <Text style={styles.dot}>·</Text>
+                <Text style={styles.distance}>{distanceKm.toFixed(1)} km</Text>
+              </>
+            ) : null}
           </View>
           {closedLabel ? (
             <Text style={styles.closedLabel} numberOfLines={2}>

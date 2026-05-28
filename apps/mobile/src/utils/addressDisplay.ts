@@ -63,3 +63,11 @@ export function distanceKm(
       Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
 }
+
+export function distanceMeters(
+  a: { lat: number; lng: number },
+  b: { lat: number; lng: number }
+): number | null {
+  const km = distanceKm(a, b);
+  return km == null ? null : km * 1000;
+}

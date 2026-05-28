@@ -42,6 +42,7 @@ export type ShopOrder = {
   shouldPrintInvoice: boolean;
   assignmentState?: string;
   riderDispatchMessage?: string | null;
+  handoffConfirmedAt?: string | null;
   customer?: OrderPeerSummary | null;
 };
 

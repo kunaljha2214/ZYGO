@@ -52,6 +52,14 @@ export async function advanceDelivery(orderId: string, status?: string) {
   return data.order;
 }
 
+export async function verifyDeliveryOtp(orderId: string, otp: string) {
+  const { data } = await api.post<{ ok: boolean; verifiedAt?: string }>(
+    `/delivery-partner/orders/${orderId}/otp/verify`,
+    { otp }
+  );
+  return data;
+}
+
 export async function fetchIncomingDelivery() {
   const { data } = await api.get<{ request: DeliveryRequest | null }>('/delivery-partner/incoming');
   return data.request;

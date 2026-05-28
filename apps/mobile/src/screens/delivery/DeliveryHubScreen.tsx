@@ -26,6 +26,7 @@ import {
 import { useDeliveryRequestStore } from '../../store/deliveryRequestStore';
 import type { DeliveryPartnerStackParamList, DeliveryPartnerTabParamList } from '../../navigation/types';
 import { colors, spacing } from '../../theme';
+import { startBackgroundLocation, stopBackgroundLocation } from '../../services/backgroundLocation';
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<DeliveryPartnerTabParamList, 'DeliveryHub'>,
@@ -91,10 +92,13 @@ export function DeliveryHubScreen() {
       const res = await setPartnerOnline(value);
       setOnline(res.isOnline);
       if (value) {
+        await startBackgroundLocation('delivery_partner');
         AppAlert.alert(
           'You are online',
           'Keep this app open on the Hub tab. New orders appear when the shop marks them ready for pickup.'
         );
+      } else {
+        await stopBackgroundLocation();
       }
     } catch (e) {
       AppAlert.alert('Error', e instanceof Error ? e.message : 'Something went wrong');

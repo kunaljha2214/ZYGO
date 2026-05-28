@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -9,6 +9,7 @@ import type { DeliveryPartnerStackParamList, DeliveryPartnerTabParamList } from 
 import { DeliveryTripIdleView } from './DeliveryTripIdleView';
 import { DeliveryTripActiveView } from './DeliveryTripActiveView';
 import { colors } from '../../theme';
+import { connectDeliverySocket, getDeliverySocket } from '../../services/deliverySocket';
 
 type StackNav = NativeStackNavigationProp<DeliveryPartnerStackParamList>;
 type TabNav = BottomTabNavigationProp<DeliveryPartnerTabParamList>;
@@ -33,6 +34,23 @@ export function DeliveryTripScreen() {
       void load();
     }, [load])
   );
+
+  useEffect(() => {
+    const socket = getDeliverySocket() ?? connectDeliverySocket();
+    const onHandoff = () => {
+      void load();
+    };
+    const onStatus = () => void load();
+    const onOtpVerified = () => void load();
+    socket.on('delivery:handoff_confirmed', onHandoff);
+    socket.on('delivery:status', onStatus);
+    socket.on('delivery:otp_verified', onOtpVerified);
+    return () => {
+      socket.off('delivery:handoff_confirmed', onHandoff);
+      socket.off('delivery:status', onStatus);
+      socket.off('delivery:otp_verified', onOtpVerified);
+    };
+  }, [load]);
 
   if (loading) {
     return (

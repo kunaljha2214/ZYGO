@@ -1,11 +1,11 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, Linking } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Linking, TextInput } from 'react-native';
 import { AppAlert } from '../../alert';
 import { AppScreen } from '../../components/layout/AppScreen';
 import { GlassCard } from '../../components/neon/GlassCard';
 import { Button } from '../../components/Button';
 import { TripStatusPills } from '../../components/trip/TripStatusPills';
-import { advanceRide, updateDriverLocation } from '../../api/driver';
+import { advanceRide, updateDriverLocation, verifyRideOtp } from '../../api/driver';
 import type { DriverRide } from '../../types/driver';
 import Geolocation from '@react-native-community/geolocation';
 import { colors, radii, spacing } from '../../theme';
@@ -13,6 +13,7 @@ import { formatInr } from '../../utils/formatMoney';
 import { drivingDirectionsUrl } from '../../utils/navigationUrl';
 import { TripContactCard } from '../../components/trip/TripContactCard';
 import { callRideCustomer } from '../../utils/placePeerCall';
+import { distanceMeters } from '../../utils/addressDisplay';
 
 const STATUS_LABELS: Record<string, string> = {
   assigned: 'Accepted — head to pickup',
@@ -44,6 +45,9 @@ type Props = {
 export function DriverTripActiveView({ ride, onRideUpdated }: Props) {
   const [busy, setBusy] = React.useState(false);
   const [current, setCurrent] = React.useState(ride);
+  const [pos, setPos] = React.useState<{ lat: number; lng: number } | null>(null);
+  const [otp, setOtp] = React.useState('');
+  const [otpBusy, setOtpBusy] = React.useState(false);
 
   useEffect(() => {
     setCurrent(ride);
@@ -54,6 +58,7 @@ export function DriverTripActiveView({ ride, onRideUpdated }: Props) {
     const rideId = current.id;
     const tick = () => {
       Geolocation.getCurrentPosition((pos) => {
+        setPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         void updateDriverLocation(pos.coords.latitude, pos.coords.longitude, rideId);
       });
     };
@@ -88,6 +93,49 @@ export function DriverTripActiveView({ ride, onRideUpdated }: Props) {
   const navTarget =
     current.status === 'in_progress' || current.status === 'arrived' ? drop : pickup;
   const btnLabel = BUTTON_LABELS[current.status];
+
+  const GEOFENCE_M = 50;
+  const distToPickup = pos ? distanceMeters(pos, pickup) : null;
+  const distToDrop = pos ? distanceMeters(pos, drop) : null;
+  const isNearPickup = distToPickup != null && distToPickup <= GEOFENCE_M;
+  const isNearDrop = distToDrop != null && distToDrop <= GEOFENCE_M;
+
+  const canAdvance =
+    !busy &&
+    (current.status === 'arriving'
+      ? isNearPickup
+      : current.status === 'in_progress'
+        ? isNearDrop && Boolean(current.rideOtpVerifiedAt)
+        : true);
+
+  const disabledHint = !pos
+    ? 'Enable GPS to continue.'
+    : current.status === 'arriving' && !isNearPickup
+      ? `Get within ${GEOFENCE_M}m of the pickup point to mark arrived.`
+      : current.status === 'in_progress' && !isNearDrop
+        ? `Get within ${GEOFENCE_M}m of the drop location to end the ride.`
+        : current.status === 'in_progress' && !current.rideOtpVerifiedAt
+          ? 'Enter customer OTP to end the ride.'
+        : null;
+
+  const submitOtp = async () => {
+    const code = otp.trim();
+    if (!/^[0-9]{4}$/.test(code)) {
+      AppAlert.alert('OTP', 'Enter the 4-digit OTP from the customer.');
+      return;
+    }
+    setOtpBusy(true);
+    try {
+      await verifyRideOtp(current.id, code);
+      const updated = { ...current, rideOtpVerifiedAt: new Date().toISOString() };
+      setCurrent(updated);
+      AppAlert.alert('OTP verified', 'You can now end the ride.');
+    } catch (e) {
+      AppAlert.alert('OTP', e instanceof Error ? e.message : 'Could not verify OTP');
+    } finally {
+      setOtpBusy(false);
+    }
+  };
 
   return (
     <AppScreen tab scroll eyebrow="Captain" title="Your trip" subtitle="Active ride">
@@ -156,8 +204,29 @@ export function DriverTripActiveView({ ride, onRideUpdated }: Props) {
         <Text style={styles.mapsBtnText}>Open navigation</Text>
       </Pressable>
 
+      {current.status === 'in_progress' && !current.rideOtpVerifiedAt ? (
+        <GlassCard style={styles.otpCard}>
+          <Text style={styles.cardLabel}>Ride OTP</Text>
+          <TextInput
+            value={otp}
+            onChangeText={setOtp}
+            placeholder="Enter 4-digit OTP"
+            placeholderTextColor={colors.textMuted}
+            keyboardType="number-pad"
+            maxLength={4}
+            style={styles.otpInput}
+          />
+          <Button title="Verify OTP" onPress={() => void submitOtp()} loading={otpBusy} />
+        </GlassCard>
+      ) : null}
+
       {btnLabel && current.status !== 'completed' ? (
-        <Button title={btnLabel} onPress={() => void advance()} loading={busy} />
+        <>
+          {disabledHint && !canAdvance ? (
+            <Text style={styles.disabledHint}>{disabledHint}</Text>
+          ) : null}
+          <Button title={btnLabel} onPress={() => void advance()} loading={busy} disabled={!canAdvance} />
+        </>
       ) : null}
     </AppScreen>
   );
@@ -209,4 +278,19 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   mapsBtnText: { color: colors.primaryBright, fontWeight: '800' },
+  disabledHint: { color: '#fbbf24', fontWeight: '700', marginBottom: spacing.md, lineHeight: 20 },
+  otpCard: { marginBottom: spacing.md, padding: spacing.md },
+  otpInput: {
+    marginTop: 8,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: colors.chipBorder,
+    borderRadius: radii.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: 2,
+  },
 });

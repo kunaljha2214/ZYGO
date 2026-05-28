@@ -13,6 +13,9 @@ import {
   dispatchRestaurantFoodEvent,
 } from '../services/foodNotifications';
 import {
+  assertCanAdvanceFoodDeliveryStatus,
+} from '../services/statusMachines/foodDeliveryStatusMachine';
+import {
   acceptDeliveryRequest,
   getPendingRequestForPartner,
   rejectDeliveryRequest,
@@ -25,6 +28,7 @@ import {
   getCustomerContactForDeliveryPartner,
   getCustomerDisplayName,
 } from '../services/orderPeerContact';
+import { generateOtp4, hashOtp, randomSalt } from '../utils/otp';
 
 const DOC_TYPES = ['aadhaar', 'pan', 'driving_license', 'rc', 'profile_photo'] as const;
 
@@ -225,21 +229,6 @@ export async function rejectRequest(req: AuthedRequest, res: Response, next: Nex
   }
 }
 
-const STATUS_FLOW: DeliveryPartnerStatus[] = [
-  'accepted',
-  'arriving_at_restaurant',
-  'picked_up',
-  'out_for_delivery',
-  'arrived_at_customer',
-  'delivered',
-];
-
-function nextDeliveryStatus(current: DeliveryPartnerStatus): DeliveryPartnerStatus | null {
-  const idx = STATUS_FLOW.indexOf(current);
-  if (idx < 0 || idx >= STATUS_FLOW.length - 1) return null;
-  return STATUS_FLOW[idx + 1];
-}
-
 export async function advanceDeliveryStatus(
   req: AuthedRequest,
   res: Response,
@@ -254,12 +243,10 @@ export async function advanceDeliveryStatus(
       next(createError(404));
       return;
     }
-    const target =
-      (req.body.status as DeliveryPartnerStatus) || nextDeliveryStatus(order.deliveryStatus);
-    if (!target) {
-      next(createError(400, 'Cannot advance delivery status'));
-      return;
-    }
+    const { target } = await assertCanAdvanceFoodDeliveryStatus(order, {
+      partnerId: req.user!.sub,
+      requestedTarget: req.body.status as DeliveryPartnerStatus | undefined,
+    });
 
     order.deliveryStatus = target;
 
@@ -278,6 +265,21 @@ export async function advanceDeliveryStatus(
     }
     if (target === 'arrived_at_customer') {
       order.status = 'out_for_delivery';
+      // Generate OTP if not already generated/verified.
+      if (!order.deliveryOtpVerifiedAt) {
+        const otp = generateOtp4();
+        const salt = randomSalt();
+        order.deliveryOtpCode = otp;
+        order.deliveryOtpSalt = salt;
+        order.deliveryOtpHash = hashOtp(otp, salt);
+        order.deliveryOtpExpiresAt = new Date(Date.now() + 30 * 60 * 1000);
+        // Deliver OTP to customer via socket/push; also returned in GET /orders/:id for customer.
+        emitToUser(order.userId.toString(), 'order:otp', {
+          orderId: order._id.toString(),
+          otp,
+          expiresAt: order.deliveryOtpExpiresAt.toISOString(),
+        });
+      }
       dispatchCustomerFoodEvent(order, 'driver_nearby');
     }
     if (target === 'delivered') {
@@ -298,6 +300,58 @@ export async function advanceDeliveryStatus(
     emitToUser(order.userId.toString(), 'order:updated', payload);
 
     res.json({ order: await formatPartnerOrder(order.toObject() as unknown as Record<string, unknown>) });
+  } catch (e) {
+    next(e);
+  }
+}
+
+export async function verifyDeliveryOtp(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const otp = String(req.body.otp ?? '').trim();
+    if (!/^[0-9]{4}$/.test(otp)) {
+      next(createError(400, 'Invalid OTP'));
+      return;
+    }
+    const order = await FoodOrder.findOne({
+      _id: req.params.orderId,
+      deliveryPartnerId: req.user!.sub,
+    }).select('+deliveryOtpHash +deliveryOtpSalt +deliveryOtpExpiresAt +deliveryOtpVerifiedAt');
+    if (!order) {
+      next(createError(404));
+      return;
+    }
+    if (order.deliveryOtpVerifiedAt) {
+      res.json({ ok: true, verifiedAt: order.deliveryOtpVerifiedAt.toISOString() });
+      return;
+    }
+    if (!order.deliveryOtpHash || !order.deliveryOtpSalt) {
+      next(createError(400, 'OTP not generated yet'));
+      return;
+    }
+    if (order.deliveryOtpExpiresAt && order.deliveryOtpExpiresAt.getTime() < Date.now()) {
+      next(createError(400, 'OTP expired. Ask customer to refresh tracking.')); // simple msg
+      return;
+    }
+    const expected = order.deliveryOtpHash;
+    const actual = hashOtp(otp, order.deliveryOtpSalt);
+    if (actual !== expected) {
+      next(createError(403, 'Incorrect OTP'));
+      return;
+    }
+    order.deliveryOtpVerifiedAt = new Date();
+    order.deliveryOtpCode = null;
+    await order.save();
+    const payload = {
+      orderId: order._id.toString(),
+      deliveryOtpVerifiedAt: order.deliveryOtpVerifiedAt.toISOString(),
+    };
+    emitToOrder(order._id.toString(), 'delivery:otp_verified', payload);
+    emitToUser(order.userId.toString(), 'order:updated', payload);
+    res.json({ ok: true, verifiedAt: payload.deliveryOtpVerifiedAt });
   } catch (e) {
     next(e);
   }
@@ -324,6 +378,8 @@ async function formatPartnerOrder(o: Record<string, unknown>) {
     },
     estimatedRiderEarnings: o.estimatedRiderEarnings,
     deliveryEtaMinutes: o.deliveryEtaMinutes,
+    handoffConfirmedAt: o.handoffConfirmedAt ?? null,
+    deliveryOtpVerifiedAt: o.deliveryOtpVerifiedAt ?? null,
     createdAt: o.createdAt,
     customer,
   };
