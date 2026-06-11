@@ -8,6 +8,7 @@ import { AppScreen } from '../components/layout/AppScreen';
 import { GlassCard } from '../components/neon/GlassCard';
 import { OrderListCard } from '../components/orders/OrderListCard';
 import { OrdersFilterChips } from '../components/orders/OrdersFilterChips';
+import { Button } from '../components/Button';
 import { colors, spacing } from '../theme';
 
 type FoodRow = {
@@ -81,7 +82,7 @@ export function OrdersListScreen({ navigation }: Props) {
     }, [paramFilter])
   );
 
-  const { data, isLoading, refetch, isRefetching } = useQuery({
+  const { data, isLoading, refetch, isRefetching, isError, error } = useQuery({
     queryKey: ['orders-unified'],
     queryFn: async () => {
       const [foodRes, rideRes] = await Promise.all([
@@ -111,6 +112,20 @@ export function OrdersListScreen({ navigation }: Props) {
           <ActivityIndicator size="large" color={colors.primaryBright} />
           <Text style={styles.loadingText}>Loading your orders…</Text>
         </View>
+      </AppScreen>
+    );
+  }
+
+  if (isError) {
+    return (
+      <AppScreen tab eyebrow="Activity" title="Orders" subtitle="Could not load orders">
+        <GlassCard style={styles.empty}>
+          <Text style={styles.emptyTitle}>Something went wrong</Text>
+          <Text style={styles.emptySub}>
+            {error instanceof Error ? error.message : 'Please try again.'}
+          </Text>
+          <Button title="Retry" onPress={() => void refetch()} />
+        </GlassCard>
       </AppScreen>
     );
   }

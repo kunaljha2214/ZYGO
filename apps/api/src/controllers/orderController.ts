@@ -380,6 +380,69 @@ export async function getOrderRiderContact(
   }
 }
 
+export async function checkoutOrderPayment(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (!req.user) {
+      next(createError(401));
+      return;
+    }
+    const order = await FoodOrder.findOne({
+      _id: req.params.id,
+      userId: req.user.sub,
+    });
+    if (!order) {
+      next(createError(404, 'Order not found'));
+      return;
+    }
+    await assertOrderPayableByUser(order._id.toString(), req.user.sub);
+
+    const { enabled: razorpayEnabled } = getRazorpayConfig();
+    if (!razorpayEnabled) {
+      next(createError(503, 'Online payment is not configured. Contact support.'));
+      return;
+    }
+
+    if (!order.razorpayOrderId) {
+      const rzOrder = await createRazorpayOrder({
+        amountInr: order.total,
+        receipt: order._id.toString(),
+        notes: {
+          orderNumber: order.orderNumber,
+          restaurantId: order.restaurantId.toString(),
+        },
+      });
+      order.razorpayOrderId = rzOrder.id;
+      await order.save();
+    }
+
+    const customer = await User.findById(req.user.sub).select('name email phone').lean();
+
+    res.json({
+      orderId: order._id.toString(),
+      total: order.total,
+      payment: {
+        keyId: getRazorpayKeyId(),
+        razorpayOrderId: order.razorpayOrderId!,
+        amount: toPaise(order.total),
+        currency: 'INR',
+        name: 'Zygo',
+        description: `Food order ${order.orderNumber}`,
+        prefill: {
+          name: customer?.name ?? '',
+          email: customer?.email ?? '',
+          contact: customer?.phone ?? '',
+        },
+      },
+    });
+  } catch (e) {
+    next(e);
+  }
+}
+
 export async function verifyOrderPayment(
   req: AuthedRequest,
   res: Response,

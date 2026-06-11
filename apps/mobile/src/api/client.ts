@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { API_BASE_URL } from '../config/env';
+import { friendlyApiError } from '../utils/apiErrors';
 import { useAuthStore } from '../store/authStore';
 
 export const api = axios.create({
@@ -17,11 +18,5 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (res) => res,
-  (err) => {
-    const message =
-      err.response?.data?.error ||
-      err.message ||
-      'Something went wrong';
-    return Promise.reject(new Error(message));
-  }
+  (err) => Promise.reject(new Error(friendlyApiError(err)))
 );

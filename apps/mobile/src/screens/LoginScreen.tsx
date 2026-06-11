@@ -58,8 +58,7 @@ export function LoginScreen({ navigation }: Props) {
     } catch (e) {
       let msg = e instanceof Error ? e.message : 'Login failed';
       if (msg === 'Invalid credentials') {
-        msg =
-          'Invalid phone or password. Demo rider: 9444444444 / password123 — run `npm run seed:users` if this account was never created.';
+        msg = 'Invalid phone or password. Check your number (10 digits) and try again.';
       }
       if (msg === 'Network Error') {
         msg =

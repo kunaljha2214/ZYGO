@@ -21,6 +21,7 @@ export function DriverOnlineToggle({ online, pending, onToggle }: Props) {
         onValueChange={onToggle}
         trackColor={{ false: colors.chip, true: colors.primary }}
         thumbColor={colors.text}
+        accessibilityLabel={online ? 'Go offline' : 'Go online for rides'}
       />
     </View>
   );

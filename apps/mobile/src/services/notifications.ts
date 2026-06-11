@@ -4,6 +4,7 @@ import type { FirebaseMessagingTypes } from '@react-native-firebase/messaging';
 import { api } from '../api/client';
 import { navigationRef } from '../navigation/navigationRef';
 import { routeFromNotificationData, type NotificationData } from './notificationRoutes';
+import { usePartnerDeepLinkStore } from '../store/partnerDeepLinkStore';
 
 const CHANNEL_ID = 'zygo_events';
 
@@ -42,6 +43,12 @@ function asNotificationData(
 function navigateFromNotificationData(data: NotificationData): void {
   const route = routeFromNotificationData(data);
   if (!route || !navigationRef.isReady()) return;
+
+  if (data.role === 'delivery_partner') {
+    usePartnerDeepLinkStore.getState().setTarget('delivery_trip');
+  } else if (data.role === 'driver') {
+    usePartnerDeepLinkStore.getState().setTarget('driver_trip');
+  }
 
   const ref = navigationRef as unknown as {
     navigate: (name: string, params?: { screen: string; params: unknown }) => void;

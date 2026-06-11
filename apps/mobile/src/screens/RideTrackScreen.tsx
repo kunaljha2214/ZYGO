@@ -104,6 +104,9 @@ export function RideTrackScreen() {
       await api.patch(`/rides/${rideId}/cancel`);
     },
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['ride', rideId] }),
+    onError: (err: unknown) => {
+      Alert.alert('Cancel failed', err instanceof Error ? err.message : 'Could not cancel ride');
+    },
   });
 
   const payMut = useMutation({
@@ -153,7 +156,7 @@ export function RideTrackScreen() {
       <Text style={shared.metaCap}>
         {data.vehicleType} · {data.status.replace(/_/g, ' ')}
       </Text>
-      {data.durationMin ? (
+      {data.durationMin && data.status !== 'completed' && data.status !== 'cancelled' ? (
         <Text style={styles.eta}>
           ETA ~{data.durationMin} min
           {data.distanceKm ? ` · ${data.distanceKm} km` : ''}
@@ -165,7 +168,7 @@ export function RideTrackScreen() {
         <Card glow style={shared.block}>
           <Text style={shared.h}>Ride OTP</Text>
           <Text style={styles.otpCode}>{data.rideOtp}</Text>
-          <Text style={styles.otpHint}>Share this OTP with your captain to finish the ride.</Text>
+          <Text style={styles.otpHint}>Share this OTP with your captain to start the ride.</Text>
         </Card>
       ) : null}
 
@@ -217,7 +220,7 @@ export function RideTrackScreen() {
       </Card>
       {paymentPending ? (
         <Button
-          title={`Pay ₹${data.fare.toFixed(0)}`}
+          title={`Pay ₹${data.fare.toFixed(2)}`}
           onPress={() => payMut.mutate()}
           loading={payMut.isPending}
         />

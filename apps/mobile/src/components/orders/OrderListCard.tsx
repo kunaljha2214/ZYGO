@@ -39,7 +39,11 @@ export function OrderListCard({ kind, title, amount, status, onPress }: Props) {
   const kindLabel = kind === 'food' ? 'Food' : 'Ride';
 
   return (
-    <GlassCard onPress={onPress} style={styles.card}>
+    <GlassCard
+      onPress={onPress}
+      style={styles.card}
+      accessibilityLabel={`${kindLabel} order ${title}, ${formatInr(amount)}, ${formatStatus(status)}`}
+    >
       <View style={styles.row}>
         <View style={styles.iconWrap}>
           <Text style={styles.icon}>{kindIcon(kind)}</Text>

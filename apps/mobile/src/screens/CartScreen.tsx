@@ -100,6 +100,7 @@ export function CartScreen({ navigation }: Props) {
                 <Pressable
                   onPress={() => setQty(lineKeyForCartLine(item), item.quantity - 1)}
                   style={shared.qtyBtn}
+                  accessibilityLabel={`Decrease ${item.name} quantity`}
                 >
                   <Text style={shared.qtyTxt}>−</Text>
                 </Pressable>
@@ -107,6 +108,7 @@ export function CartScreen({ navigation }: Props) {
                 <Pressable
                   onPress={() => setQty(lineKeyForCartLine(item), item.quantity + 1)}
                   style={shared.qtyBtn}
+                  accessibilityLabel={`Increase ${item.name} quantity`}
                 >
                   <Text style={shared.qtyTxt}>+</Text>
                 </Pressable>

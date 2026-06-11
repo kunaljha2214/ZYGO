@@ -382,8 +382,8 @@ export async function confirmOrderHandoffToRider(
 ): Promise<void> {
   try {
     const { order } = await getOwnerOrder(req, req.params.id);
-    if (order.status !== 'ready_for_pickup') {
-      next(createError(400, 'Order must be ready for pickup first'));
+    if (order.status !== 'ready_for_pickup' && order.status !== 'rider_assigned') {
+      next(createError(400, 'Order must be ready for pickup with a rider assigned'));
       return;
     }
     if (!order.deliveryPartnerId) {

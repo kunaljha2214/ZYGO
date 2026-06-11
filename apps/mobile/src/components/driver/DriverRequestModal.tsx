@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable, ActivityIndicator } from 'react-native';
 import { useDriverRequestStore } from '../../store/driverRequestStore';
 import { acceptRide, rejectRide } from '../../api/driver';
+import { AppAlert } from '../../alert';
 import { colors, radii, spacing } from '../../theme';
 import { formatInr } from '../../utils/formatMoney';
 
@@ -34,6 +35,8 @@ export function DriverRequestModal({ onAccepted }: Props) {
       await acceptRide(incoming.rideId);
       setIncoming(null);
       onAccepted();
+    } catch (e) {
+      AppAlert.alert('Accept failed', e instanceof Error ? e.message : 'Could not accept ride');
     } finally {
       setBusy(false);
     }

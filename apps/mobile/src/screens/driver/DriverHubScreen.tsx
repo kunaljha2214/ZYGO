@@ -28,6 +28,7 @@ import {
 import { getDriverHubCache, setDriverHubCache } from '../../store/driverHubCache';
 import { setDriverProfileCache } from '../../store/partnerProfileCache';
 import { useDriverRequestStore } from '../../store/driverRequestStore';
+import { usePartnerDeepLinkStore } from '../../store/partnerDeepLinkStore';
 import type { DriverPartnerStackParamList } from '../../navigation/types';
 import { colors, spacing } from '../../theme';
 import { formatInr } from '../../utils/formatMoney';
@@ -119,7 +120,7 @@ export function DriverHubScreen() {
           }
           AppAlert.alert(
             'Availability fixed',
-            'Stuck “busy” state was cleared. Stay Online to receive bike ride requests.'
+            'Stuck “busy” state was cleared. Stay Online to receive ride requests.'
           );
         }
 
@@ -144,8 +145,12 @@ export function DriverHubScreen() {
   useFocusEffect(
     useCallback(() => {
       void load(hasLoadedOnce.current);
+      const deepLink = usePartnerDeepLinkStore.getState().consumeTarget();
+      if (deepLink === 'driver_trip') {
+        navigation.navigate('DriverTrip');
+      }
       return undefined;
-    }, [load])
+    }, [load, navigation])
   );
 
   const toggleOnline = useCallback(
@@ -224,11 +229,10 @@ export function DriverHubScreen() {
       </View>
       {!online ? (
         <Text style={styles.hint}>
-          Turn on Online to receive ride requests. Use phone 9222222222 (ride driver), not the food delivery
-          rider account 9444444444.
+          Turn on Online to receive ride requests for bike, auto, and car.
         </Text>
       ) : incoming ? (
-        <Text style={styles.hintActive}>Incoming ride — Accept or Reject on the sheet below.</Text>
+        <Text style={styles.hintActive}>Incoming ride — Accept or Reject in the popup.</Text>
       ) : (
         <Text style={styles.hint}>Online — waiting for rides near you…</Text>
       )}

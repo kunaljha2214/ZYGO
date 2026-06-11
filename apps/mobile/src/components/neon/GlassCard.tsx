@@ -8,9 +8,10 @@ type Props = {
   active?: boolean;
   style?: StyleProp<ViewStyle>;
   noPadding?: boolean;
+  accessibilityLabel?: string;
 };
 
-export function GlassCard({ children, onPress, active, style, noPadding }: Props) {
+export function GlassCard({ children, onPress, active, style, noPadding, accessibilityLabel }: Props) {
   const inner = (
     <View style={[styles.card, active && styles.cardActive, noPadding && styles.noPad, style]}>
       <View style={styles.shine} pointerEvents="none" />
@@ -21,7 +22,12 @@ export function GlassCard({ children, onPress, active, style, noPadding }: Props
 
   if (onPress) {
     return (
-      <Pressable onPress={onPress} style={({ pressed }) => pressed && styles.pressed}>
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        style={({ pressed }) => pressed && styles.pressed}
+      >
         {inner}
       </Pressable>
     );

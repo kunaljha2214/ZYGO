@@ -91,8 +91,10 @@ export function DeliveryTripActiveView({ order, onOrderUpdated }: Props) {
     }
   };
 
-  const rest = current.restaurantCoords ?? { lat: 12.97, lng: 77.59 };
+  const rest = current.restaurantCoords;
   const drop = current.deliveryAddress.coordinates;
+  const hasRestCoords =
+    rest != null && Number.isFinite(rest.lat) && Number.isFinite(rest.lng);
   const nextLabel = NEXT_LABEL[current.deliveryStatus];
   const navTarget =
     current.deliveryStatus === 'picked_up' ||
@@ -108,7 +110,7 @@ export function DeliveryTripActiveView({ order, onOrderUpdated }: Props) {
       : current.restaurantName ?? 'Restaurant';
 
   const GEOFENCE_M = 50;
-  const distToRest = pos ? distanceMeters(pos, rest) : null;
+  const distToRest = pos && hasRestCoords && rest ? distanceMeters(pos, rest) : null;
   const distToDrop = pos ? distanceMeters(pos, drop) : null;
   const isNearRest = distToRest != null && distToRest <= GEOFENCE_M;
   const isNearDrop = distToDrop != null && distToDrop <= GEOFENCE_M;
@@ -189,15 +191,19 @@ export function DeliveryTripActiveView({ order, onOrderUpdated }: Props) {
       <GlassCard glow style={styles.card}>
         <Text style={styles.cardLabel}>Restaurant</Text>
         <Text style={styles.name}>{current.restaurantName ?? 'Restaurant'}</Text>
-        <Pressable
-          onPress={() =>
-            void Linking.openURL(
-              drivingDirectionsUrl(rest.lat, rest.lng, current.restaurantName ?? 'Restaurant')
-            )
-          }
-        >
-          <Text style={styles.nav}>Navigate to restaurant →</Text>
-        </Pressable>
+        {hasRestCoords && rest ? (
+          <Pressable
+            onPress={() =>
+              void Linking.openURL(
+                drivingDirectionsUrl(rest.lat, rest.lng, current.restaurantName ?? 'Restaurant')
+              )
+            }
+          >
+            <Text style={styles.nav}>Navigate to restaurant →</Text>
+          </Pressable>
+        ) : (
+          <Text style={styles.notes}>Restaurant location unavailable for navigation.</Text>
+        )}
       </GlassCard>
 
       <GlassCard style={styles.card}>
@@ -229,12 +235,14 @@ export function DeliveryTripActiveView({ order, onOrderUpdated }: Props) {
         ) : null}
       </GlassCard>
 
-      <Pressable
-        style={styles.mapsBtn}
-        onPress={() => void Linking.openURL(drivingDirectionsUrl(navTarget.lat, navTarget.lng, navLabel))}
-      >
-        <Text style={styles.mapsBtnText}>Open navigation</Text>
-      </Pressable>
+      {navTarget ? (
+        <Pressable
+          style={styles.mapsBtn}
+          onPress={() => void Linking.openURL(drivingDirectionsUrl(navTarget.lat, navTarget.lng, navLabel))}
+        >
+          <Text style={styles.mapsBtnText}>Open navigation</Text>
+        </Pressable>
+      ) : null}
 
       {current.deliveryStatus === 'arrived_at_customer' && !current.deliveryOtpVerifiedAt ? (
         <GlassCard style={styles.otpCard}>

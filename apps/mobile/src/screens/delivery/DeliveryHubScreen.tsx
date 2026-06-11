@@ -27,6 +27,7 @@ import { useDeliveryRequestStore } from '../../store/deliveryRequestStore';
 import type { DeliveryPartnerStackParamList, DeliveryPartnerTabParamList } from '../../navigation/types';
 import { colors, spacing } from '../../theme';
 import { startBackgroundLocation, stopBackgroundLocation } from '../../services/backgroundLocation';
+import { usePartnerDeepLinkStore } from '../../store/partnerDeepLinkStore';
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<DeliveryPartnerTabParamList, 'DeliveryHub'>,
@@ -79,7 +80,11 @@ export function DeliveryHubScreen() {
   useFocusEffect(
     useCallback(() => {
       void load();
-    }, [load])
+      const deepLink = usePartnerDeepLinkStore.getState().consumeTarget();
+      if (deepLink === 'delivery_trip') {
+        navigation.navigate('DeliveryTrip');
+      }
+    }, [load, navigation])
   );
 
   const toggleOnline = async (value: boolean) => {
@@ -130,7 +135,7 @@ export function DeliveryHubScreen() {
           Turn on Online before the shop marks an order ready — otherwise you will not get delivery requests.
         </Text>
       ) : incoming ? (
-        <Text style={styles.hintActive}>Incoming delivery request — use Accept / Reject below.</Text>
+        <Text style={styles.hintActive}>Incoming delivery request — Accept or Reject in the popup.</Text>
       ) : (
         <Text style={styles.hint}>Online — waiting for orders near you…</Text>
       )}
@@ -141,6 +146,7 @@ export function DeliveryHubScreen() {
           onValueChange={(v) => void toggleOnline(v)}
           disabled={busy}
           trackColor={{ true: colors.primary, false: colors.chip }}
+          accessibilityLabel={online ? 'Go offline' : 'Go online for deliveries'}
         />
       </View>
 

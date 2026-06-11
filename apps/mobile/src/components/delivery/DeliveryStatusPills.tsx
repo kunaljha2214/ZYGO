@@ -7,6 +7,7 @@ const STEPS = [
   { key: 'arriving_at_restaurant', label: 'To restaurant' },
   { key: 'picked_up', label: 'Picked up' },
   { key: 'out_for_delivery', label: 'On the way' },
+  { key: 'arrived_at_customer', label: 'At customer' },
   { key: 'delivered', label: 'Delivered' },
 ];
 

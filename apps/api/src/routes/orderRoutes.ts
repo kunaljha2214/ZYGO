@@ -40,6 +40,10 @@ const createOrderReviewHandler: RequestHandler = (req, res, next) => {
   void orders.createOrderReview(req as AuthedRequest, res, next);
 };
 
+const checkoutOrderPaymentHandler: RequestHandler = (req, res, next) => {
+  void orders.checkoutOrderPayment(req as AuthedRequest, res, next);
+};
+
 const verifyOrderPaymentHandler: RequestHandler = (req, res, next) => {
   void orders.verifyOrderPayment(req as AuthedRequest, res, next);
 };
@@ -81,6 +85,8 @@ r.post(
 );
 
 r.get('/orders', listOrdersHandler);
+
+r.post('/orders/:id/payment/checkout', checkoutOrderPaymentHandler);
 
 r.post(
   '/orders/payment/verify',

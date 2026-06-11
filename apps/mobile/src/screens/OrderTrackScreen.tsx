@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Alert } from 'react-native';
 import { LiveDeliveryMap } from '../components/map/LiveDeliveryMap';
 import { StackScroll } from '../components/layout/StackScroll';
 import { useRoute, type RouteProp } from '@react-navigation/native';
@@ -11,6 +11,8 @@ import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { OrderPriceBreakdown } from '../components/food/OrderPriceBreakdown';
 import type { CustomerPriceBreakdown } from '../api/orders';
+import { checkoutOrderPayment, verifyOrderPayment } from '../api/orders';
+import { openRazorpayCheckout } from '../services/razorpayCheckout';
 import { TripContactCard } from '../components/trip/TripContactCard';
 import { callOrderRestaurant, callOrderRider } from '../utils/placePeerCall';
 import { shared } from '../theme/styles';
@@ -156,6 +158,23 @@ export function OrderTrackScreen() {
       await api.patch(`/orders/${orderId}/cancel`);
     },
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['order', orderId] }),
+    onError: (err: unknown) => {
+      Alert.alert('Cancel failed', err instanceof Error ? err.message : 'Could not cancel order');
+    },
+  });
+
+  const payMut = useMutation({
+    mutationFn: async () => {
+      const checkout = await checkoutOrderPayment(orderId);
+      const paymentResult = await openRazorpayCheckout(checkout.payment);
+      await verifyOrderPayment(paymentResult);
+    },
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['order', orderId] }),
+    onError: (err: unknown) => {
+      const code = (err as { code?: number })?.code;
+      if (code === 0) return;
+      Alert.alert('Payment', err instanceof Error ? err.message : 'Payment failed');
+    },
   });
 
   if (isLoading || !data) {
@@ -184,11 +203,17 @@ export function OrderTrackScreen() {
     Number.isFinite(restaurant.lat) &&
     Number.isFinite(restaurant.lng);
 
+  const paymentDue =
+    data.paymentStatus === 'pending' || data.paymentStatus === 'failed';
+  const showEta =
+    data.deliveryEtaMinutes &&
+    data.status !== 'delivered' &&
+    data.status !== 'cancelled';
+
   return (
     <StackScroll nestedScrollEnabled scrollEnabled={!mapGestureActive}>
       <Text style={shared.orderNum}>{data.orderNumber}</Text>
       {data.restaurantName ? <Text style={shared.meta}>{data.restaurantName}</Text> : null}
-      <Text style={shared.stat}>Status: {data.status.replace(/_/g, ' ')}</Text>
       {data.paymentStatus && data.paymentStatus !== 'paid' && data.paymentStatus !== 'refunded' ? (
         <Text style={styles.paymentPending}>
           {data.paymentStatus === 'refund_failed'
@@ -218,7 +243,7 @@ export function OrderTrackScreen() {
       {data.status === 'cancelled' && data.rejectReason ? (
         <Text style={styles.cancelReason}>{data.rejectReason}</Text>
       ) : null}
-      {data.deliveryEtaMinutes ? (
+      {data.deliveryEtaMinutes && showEta ? (
         <Text style={styles.eta}>ETA ~{data.deliveryEtaMinutes} min</Text>
       ) : null}
       <StatusStepper kind="food" status={data.status} />
@@ -241,7 +266,7 @@ export function OrderTrackScreen() {
 
       {data.rider && RIDER_CONTACT_STATUSES.has(data.status) ? (
         <TripContactCard
-          title="Delivery partner"
+          title="Your rider"
           name={data.rider.name}
           onCall={() => callOrderRider(orderId)}
         />
@@ -293,6 +318,13 @@ export function OrderTrackScreen() {
           {data.deliveryAddress.label}: {data.deliveryAddress.line1}
         </Text>
       </Card>
+      {paymentDue && data.status === 'payment_pending' ? (
+        <Button
+          title={`Pay ₹${data.total.toFixed(2)}`}
+          onPress={() => payMut.mutate()}
+          loading={payMut.isPending}
+        />
+      ) : null}
       {data.status === 'placed' || data.status === 'payment_pending' ? (
         <Button
           title="Cancel order"

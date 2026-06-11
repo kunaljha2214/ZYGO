@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { colors, radii } from '../theme';
 
 const FOOD_STEPS = [
+  'payment_pending',
   'placed',
   'confirmed',
   'preparing',

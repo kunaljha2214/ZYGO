@@ -71,6 +71,13 @@ export async function createFoodOrder(payload: CreateOrderPayload) {
   return data;
 }
 
+export async function checkoutOrderPayment(orderId: string) {
+  const { data } = await api.post<{ orderId: string; total: number; payment: CreateOrderPayment }>(
+    `/orders/${orderId}/payment/checkout`
+  );
+  return data;
+}
+
 export async function verifyOrderPayment(body: {
   razorpay_order_id: string;
   razorpay_payment_id: string;

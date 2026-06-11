@@ -10,144 +10,95 @@ import { isFiniteCoord } from '../components/rides/mapTypes';
 import { shared } from '../theme/styles';
 import { colors } from '../theme';
 
-
-
 type Vehicle = { id: string; label: string; baseFare: number; perKm: number; perMin: number };
 
-
-
 type Props = HomeStackProps<'RideFare'>;
-
-
 
 export function RideFareScreen({ navigation, route }: Props) {
   const { pickup, drop } = route.params;
 
   const [vehicleType, setVehicleType] = useState<string>('bike');
-
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-
-  const [estimate, setEstimate] = useState<{ distanceKm: number; durationMin: number; fare: number } | null>(
-
-    null
-
-  );
-
+  const [estimate, setEstimate] = useState<{
+    distanceKm: number;
+    durationMin: number;
+    fare: number;
+  } | null>(null);
+  const [estimateLoading, setEstimateLoading] = useState(true);
+  const [estimateErr, setEstimateErr] = useState<string | null>(null);
+  const [estimateRetry, setEstimateRetry] = useState(0);
   const [booking, setBooking] = useState(false);
-
   const [bookErr, setBookErr] = useState<string | null>(null);
   const [mapGestureActive, setMapGestureActive] = useState(false);
 
-
-
   useEffect(() => {
-
     void (async () => {
-
       try {
-
         const { data } = await api.get<{ vehicleTypes: Vehicle[] }>('/config/vehicle-types');
-
         setVehicles(data.vehicleTypes);
-
       } catch {
-
         setVehicles([
-
           { id: 'bike', label: 'Bike', baseFare: 25, perKm: 8, perMin: 1.5 },
-
           { id: 'auto', label: 'Auto', baseFare: 40, perKm: 12, perMin: 2 },
-
           { id: 'car', label: 'Car', baseFare: 60, perKm: 18, perMin: 2.5 },
-
         ]);
-
       }
-
     })();
-
   }, []);
 
-
-
   useEffect(() => {
-
     let cancelled = false;
 
     void (async () => {
-
+      setEstimateLoading(true);
+      setEstimateErr(null);
       try {
-
         const { data } = await api.post<{ distanceKm: number; durationMin: number; fare: number }>(
-
           '/rides/estimate',
-
           {
-
             pickup: { coordinates: pickup.coordinates },
-
             drop: { coordinates: drop.coordinates },
-
-            vehicleType}
-
+            vehicleType,
+          }
         );
-
-        if (!cancelled) setEstimate(data);
-
-      } catch {
-
-        if (!cancelled) setEstimate(null);
-
+        if (!cancelled) {
+          setEstimate(data);
+          setEstimateLoading(false);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setEstimate(null);
+          setEstimateErr(e instanceof Error ? e.message : 'Could not calculate fare');
+          setEstimateLoading(false);
+        }
       }
-
     })();
 
     return () => {
-
       cancelled = true;
-
     };
-
-  }, [pickup.coordinates.lat, pickup.coordinates.lng, drop.coordinates.lat, drop.coordinates.lng, vehicleType]);
-
-
+  }, [pickup.coordinates.lat, pickup.coordinates.lng, drop.coordinates.lat, drop.coordinates.lng, vehicleType, estimateRetry]);
 
   async function confirm() {
-
     setBookErr(null);
-
     setBooking(true);
-
     try {
-
       const { data } = await api.post<{ id: string }>('/rides', {
-
         pickup,
-
         drop,
-
-        vehicleType});
-
+        vehicleType,
+      });
       navigation.replace('RideTrack', { rideId: data.id });
-
     } catch (e) {
-
       setBookErr(e instanceof Error ? e.message : 'Booking failed');
-
     } finally {
-
       setBooking(false);
-
     }
-
   }
-
-
 
   const pickupCoord = pickup.coordinates;
   const dropCoord = drop.coordinates;
-  const showRouteMap =
-    isFiniteCoord(pickupCoord) && isFiniteCoord(dropCoord);
+  const showRouteMap = isFiniteCoord(pickupCoord) && isFiniteCoord(dropCoord);
 
   return (
     <StackScroll nestedScrollEnabled scrollEnabled={!mapGestureActive}>
@@ -181,29 +132,17 @@ export function RideFareScreen({ navigation, route }: Props) {
       <Text style={shared.sectionLabel}>Vehicle</Text>
 
       <View style={shared.vehicleRow}>
-
         {vehicles.map((v) => (
-
           <Pressable
-
             key={v.id}
-
             onPress={() => setVehicleType(v.id)}
-
             style={[shared.vehicleChip, vehicleType === v.id && shared.vehicleChipOn]}
-
           >
-
             <Text style={[shared.vehicleChipTxt, vehicleType === v.id && shared.vehicleChipTxtOn]}>
-
               {v.label}
-
             </Text>
-
           </Pressable>
-
         ))}
-
       </View>
 
       {estimate ? (
@@ -211,23 +150,30 @@ export function RideFareScreen({ navigation, route }: Props) {
           <Text style={shared.meta}>
             Route · ~{estimate.distanceKm} km · ~{estimate.durationMin} min
           </Text>
-
           <Text style={shared.fare}>₹{estimate.fare.toFixed(2)}</Text>
-
-          <Text style={shared.muted}>Pay cash to captain (MVP)</Text>
-
+          <Text style={shared.muted}>Pay securely with Razorpay after your ride ends</Text>
         </Card>
-
-      ) : (
-
+      ) : estimateLoading ? (
         <Text style={shared.muted}>Calculating fare…</Text>
-
+      ) : (
+        <View>
+          <Text style={shared.err}>{estimateErr ?? 'Could not calculate fare'}</Text>
+          <Button
+            title="Retry fare estimate"
+            variant="ghost"
+            onPress={() => setEstimateRetry((n) => n + 1)}
+          />
+        </View>
       )}
 
-      <Button title="Confirm ride" onPress={() => void confirm()} loading={booking} />
+      <Button
+        title="Confirm ride"
+        onPress={() => void confirm()}
+        loading={booking}
+        disabled={!estimate}
+      />
 
       {bookErr ? <Text style={shared.err}>{bookErr}</Text> : null}
-
     </StackScroll>
   );
 }

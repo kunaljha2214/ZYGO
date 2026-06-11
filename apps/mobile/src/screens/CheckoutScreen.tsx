@@ -110,6 +110,7 @@ export function CheckoutScreen({ navigation }: Props) {
       const permission = await ensureLocationPermission();
       if (permission !== 'granted') {
         if (!cancelled) {
+          setDeliveryErr('Location access denied — search for your address or pick a point on the map.');
           setLocatingDelivery(false);
         }
         return;
@@ -293,7 +294,7 @@ export function CheckoutScreen({ navigation }: Props) {
       <Button
         title={
           quoteLoading && quotePayload
-            ? 'Opening payment…'
+            ? 'Calculating total…'
             : `Pay ₹${toPay.toFixed(2)}`
         }
         onPress={placeOrder}

@@ -24,7 +24,6 @@ import {
   getCustomerDisplayName,
 } from '../services/ridePeerContact';
 import { assertCanAdvanceRideStatus } from '../services/statusMachines/rideStatusMachine';
-import { creditDriverWalletForRide } from '../services/ridePayment';
 import { generateOtp4, hashOtp, randomSalt } from '../utils/otp';
 
 const DOC_TYPES = ['aadhaar', 'pan', 'driving_license', 'rc', 'insurance', 'selfie'] as const;
@@ -339,9 +338,6 @@ export async function advanceRideStatus(req: AuthedRequest, res: Response, next:
     }
 
     if (target === 'completed') {
-      ride.paymentStatus = 'paid';
-      ride.paidAt = new Date();
-      ride.driverEarningsSettled = false;
       ride.rideOtpCode = null;
       const profile = await DriverProfile.findOne({ driverId: req.user!.sub });
       if (profile) {
@@ -353,10 +349,6 @@ export async function advanceRideStatus(req: AuthedRequest, res: Response, next:
         activeRideId: null,
       });
       await dispatchCustomerRideEvent(ride, 'ride_completed', { fare: ride.fare });
-      await dispatchDriverRideEvent(req.user!.sub, ride, 'ride_completed_earnings', {
-        earnings: ride.driverEarned ?? ride.estimatedDriverEarnings,
-      });
-      await creditDriverWalletForRide(ride);
     }
 
     await ride.save();
